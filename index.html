@@ -748,30 +748,43 @@ function cleanDate(raw){
 
 function parseStats(rows){
   if(!rows.length) return;
-  // Find header row
-  let hi = rows.findIndex(r => r.some(c=>c.toLowerCase().includes('date')));
+  // Find BEST header row — must have both institution + owner columns
+  let hi = -1;
+  for(let i=0;i<Math.min(rows.length,10);i++){
+    const r=rows[i].map(c=>String(c).toLowerCase().trim());
+    if(r.some(c=>c.includes('institution'))&&r.some(c=>c.includes('owner'))){hi=i;break;}
+  }
+  if(hi<0) hi=rows.findIndex(r=>r.some(c=>String(c).toLowerCase().includes('date')));
   if(hi<0) hi=0;
-  const hdr = rows[hi].map(c=>c.toLowerCase().trim());
-  const col = n => hdr.indexOf(n);
-  const iDate=col('date'), iInst=col('institution'), iOwner=col('data owner'),
-        iCount=col('files captured'), iDuty=col('on duty?'), iNotes=col('notes');
-
-  const parsed = [];
+  const hdr=rows[hi].map(c=>String(c).toLowerCase().trim());
+  const iDate  = hdr.findIndex(h=>h.includes('date'));
+  const iInst  = hdr.findIndex(h=>h.includes('institution'));
+  const iOwner = hdr.findIndex(h=>h.includes('data owner')||h==='owner');
+  const iCount = hdr.findIndex(h=>h.includes('files')||h.includes('captured'));
+  const iDuty  = hdr.findIndex(h=>h.includes('duty'));
+  const iNotes = hdr.findIndex(h=>h.includes('note'));
+  console.log('Stats header row:',hi,'| date:',iDate,'inst:',iInst,'owner:',iOwner,'count:',iCount);
+  const parsed=[];
   for(let i=hi+1;i<rows.length;i++){
     const r=rows[i];
-    if(!r[iInst]||!r[iOwner]) continue;
-    const cnt = parseFloat(r[iCount]);
+    const inst  = iInst>=0  ? String(r[iInst] ||'').trim() : '';
+    const owner = iOwner>=0 ? String(r[iOwner]||'').trim() : '';
+    if(!inst||!owner) continue;
+    if(inst.toLowerCase().includes('institution')) continue;
+    if(inst.toLowerCase().includes('enter one')) continue;
+    const cnt=parseFloat(iCount>=0?r[iCount]:0);
     if(isNaN(cnt)) continue;
     parsed.push({
-      date: cleanDate(r[iDate]),
-      inst: r[iInst]||'',
-      owner: r[iOwner]||'',
+      date:  cleanDate(iDate>=0?r[iDate]:''),
+      inst:  inst,
+      owner: owner,
       count: cnt,
-      duty: r[iDuty]||'YES',
-      notes: iNotes>=0?r[iNotes]:'',
+      duty:  iDuty>=0  ? String(r[iDuty] ||'YES').trim() : 'YES',
+      notes: iNotes>=0 ? String(r[iNotes]||'').trim()    : '',
     });
   }
-  if(parsed.length) RAW.stats = parsed;
+  console.log('Parsed',parsed.length,'rows. Sample:', parsed.slice(0,3).map(r=>r.inst+'/'+r.owner+'/'+r.count));
+  if(parsed.length) RAW.stats=parsed;
 }
 
 function parseConfig(rows){
