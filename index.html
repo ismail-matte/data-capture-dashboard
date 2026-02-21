@@ -622,11 +622,11 @@ const DEFAULTS = {
 CFG = Object.assign({}, DEFAULTS, CFG);
 
 let RAW = {
-  stats:[],
-  config:{ institutions:[], members:[] },
-  duplicates:[],
+  stats: [],
+  config: { institutions: [], members: [] },
+  duplicates: [],
 };
-let FILTERED = { stats:[], mode:'global', inst:'all', member:'all', date:'all' };
+let FILTERED = { stats: [], mode: 'global', inst: 'all', member: 'all', date: 'all' };
 let isAdmin = false;
 let autoTimer = null;
 
@@ -669,7 +669,7 @@ function matchMemberName(dataName, member) {
     }
   }
   
-  // Special cases
+  // Special cases for Cotil/Delight
   if ((d.includes('cotil') || d.includes('delight')) && 
       (full.includes('cotilda') || short === 'delight')) return true;
   
@@ -709,8 +709,7 @@ function calculatePredictions() {
       return;
     }
     
-    // Calculate daily capture rate (files per day)
-    // Group by date and sum captures
+    // Calculate daily capture rate
     const dailyTotals = {};
     stats.forEach(s => {
       if (s.date) {
@@ -720,7 +719,6 @@ function calculatePredictions() {
     
     const dates = Object.keys(dailyTotals).sort();
     if (dates.length === 0) {
-      // No data yet
       predictions.push({
         inst: inst.name,
         completed: false,
@@ -738,87 +736,46 @@ function calculatePredictions() {
       return;
     }
     
-    // Calculate rates using different methods for better prediction
-    
-    // Method 1: Overall average rate
+    // Calculate rates
     const totalDays = dates.length;
     const totalCaptured = captured;
     const avgRate = totalCaptured / totalDays;
     
-    // Method 2: Recent trend (last 3 days weighted more)
+    // Recent trend (last 3 days)
     const recentDates = dates.slice(-3);
     let recentTotal = 0;
     recentDates.forEach(d => recentTotal += dailyTotals[d]);
     const recentRate = recentDates.length > 0 ? recentTotal / recentDates.length : avgRate;
     
-    // Method 3: Peak performance (best 3 days)
-    const sortedRates = Object.values(dailyTotals).sort((a,b) => b - a);
-    const peakRate = sortedRates.slice(0, 3).reduce((a,b) => a + b, 0) / 3;
+    // Weighted rate
+    const weightedRate = (recentRate * 0.7) + (avgRate * 0.3);
     
-    // Calculate team size (active members in this institution)
+    // Team size
     const activeMembers = RAW.config.members.filter(m => 
       m.inst === inst.name && m.status === 'ACTIVE'
     ).length;
-    
-    // If no active members in CONFIG, count unique owners in data
     const uniqueOwners = new Set(stats.map(s => s.owner)).size;
     const effectiveTeamSize = activeMembers || uniqueOwners || 1;
     
-    // Weighted rate calculation
-    // Recent rate 50%, avg rate 30%, peak rate 20%
-    const weightedRate = (recentRate * 0.5) + (avgRate * 0.3) + (peakRate * 0.2);
+    // Days needed
+    const daysNeeded = Math.ceil(remaining / Math.max(weightedRate, 1));
     
-    // Adjust rate based on team size
-    // If team size is small, rate might be less reliable
-    const adjustedRate = weightedRate * (1 + (effectiveTeamSize - 1) * 0.1);
-    
-    // Calculate days needed
-    const daysNeeded = Math.ceil(remaining / adjustedRate);
-    
-    // Calculate confidence level
+    // Confidence
     let confidence = 'medium';
-    const dataPoints = dates.length;
-    const consistency = Math.min(...Object.values(dailyTotals)) > 0 ? 'high' : 'medium';
+    if (dates.length >= 5 && weightedRate > 5) confidence = 'high';
+    else if (dates.length < 3) confidence = 'low';
     
-    if (dataPoints >= 5 && adjustedRate > 0 && consistency === 'high') {
-      confidence = 'high';
-    } else if (dataPoints < 3 || adjustedRate <= 0) {
-      confidence = 'low';
-    }
-    
-    // Calculate projected completion date
+    // Projected date
     const today = new Date();
     today.setHours(0,0,0,0);
-    
-    // If we have data for today, start from tomorrow
-    const todayStr = today.toISOString().split('T')[0];
-    const hasTodayData = stats.some(s => s.date === todayStr);
-    
-    const startDate = new Date(today);
-    if (!hasTodayData) {
-      // If no data today, we can start today
-      startDate.setDate(startDate.getDate());
-    } else {
-      // If we already have data today, start tomorrow
-      startDate.setDate(startDate.getDate() + 1);
-    }
-    
-    const completionDate = new Date(startDate);
+    const completionDate = new Date(today);
     completionDate.setDate(completionDate.getDate() + daysNeeded);
     
-    // Format date nicely
-    const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
-    let dateStr;
-    
-    if (daysNeeded <= 0) {
-      dateStr = 'TODAY';
-    } else if (daysNeeded <= 7) {
-      dateStr = completionDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    } else if (daysNeeded <= 30) {
-      dateStr = completionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    } else {
-      dateStr = completionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
+    const dateStr = completionDate.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      ...(daysNeeded > 30 ? { year: 'numeric' } : {})
+    });
     
     predictions.push({
       inst: inst.name,
@@ -830,27 +787,473 @@ function calculatePredictions() {
         captured,
         target: inst.target,
         remaining,
-        rate: Math.round(adjustedRate * 10) / 10,
-        avgRate: Math.round(avgRate * 10) / 10,
-        recentRate: Math.round(recentRate * 10) / 10,
+        rate: Math.round(weightedRate * 10) / 10,
         teamSize: effectiveTeamSize,
-        dataPoints: dates.length,
-        completionDate: completionDate.toISOString().split('T')[0]
+        dataPoints: dates.length
       }
     });
   });
   
-  return predictions.sort((a, b) => {
-    if (a.completed && !b.completed) return -1;
-    if (!a.completed && b.completed) return 1;
-    return (a.details?.remaining || 0) - (b.details?.remaining || 0);
+  return predictions;
+}
+
+// ═══════════════════════════════════════════════
+//  LOCK / UNLOCK
+// ═══════════════════════════════════════════════
+function tryUnlock(){
+  const v = document.getElementById('lockInput').value.trim();
+  const err = document.getElementById('lockError');
+  if(v === teamPass() || v === adminPass()){
+    if(v === adminPass()) isAdmin = true;
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    if(isAdmin){
+      document.getElementById('adminBtn').style.display = 'flex';
+      document.getElementById('connectBtn').style.display = 'flex';
+      document.getElementById('cfgBar').style.display = 'flex';
+    }
+    initApp();
+  } else {
+    err.textContent = '✗ Incorrect passcode. Try again.';
+    document.getElementById('lockInput').value = '';
+    setTimeout(() => err.textContent = '', 3000);
+  }
+}
+document.getElementById('lockInput').addEventListener('keydown', e => { if(e.key === 'Enter') tryUnlock(); });
+
+function lockApp(){
+  isAdmin = false;
+  document.getElementById('lockInput').value = '';
+  document.getElementById('lockError').textContent = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('lockScreen').style.display = 'flex';
+  document.getElementById('adminBtn').style.display = 'none';
+  document.getElementById('connectBtn').style.display = 'none';
+  document.getElementById('cfgBar').style.display = 'none';
+  stopAutoRefresh();
+}
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+function initApp(){
+  // load defaults
+  RAW.config.institutions = [
+    {name: 'Arua RRH',  code: 'RRH',   target: 249,  notes: 'Regional Referral Hospital'},
+    {name: 'Arua City', code: 'CITY',  target: 2253, notes: 'City Council'},
+    {name: 'Arua DLG',  code: 'DLG',   target: 0,    notes: 'District Local Government'},
+    {name: 'Yumbe RRH', code: 'YUMBE', target: 0,    notes: 'Yumbe Referral Hospital'},
+  ];
+  RAW.config.members = [
+    {name: 'Nicholas Mulaya', short: 'Nicholas', status: 'ACTIVE', inst: 'Arua RRH'},
+    {name: 'Robinah Kasande', short: 'Robinah',  status: 'ACTIVE', inst: 'Arua RRH'},
+    {name: 'Kalinda Fredrick', short: 'Fredrick', status: 'ACTIVE', inst: 'Arua RRH'},
+    {name: 'Anthony Nyombi',  short: 'Anthony',  status: 'ACTIVE', inst: 'Arua RRH'},
+    {name: 'Salim Kigundu',   short: 'Salim',    status: 'ACTIVE', inst: 'Arua RRH'},
+    {name: 'Dilght Cotilda',  short: 'Delight',  status: 'ACTIVE', inst: 'Arua RRH'},
+    {name: 'Ismail Matte',    short: 'Ismail',   status: 'ACTIVE', inst: 'Arua RRH', phone: '0782475028'},
+    {name: 'Dan Ndyamureeba', short: 'Dan',      status: 'OFF',    inst: 'Arua RRH'},
+  ];
+  RAW.stats = [
+    {date: '2026-02-17', inst: 'Arua RRH', owner: 'Nicholas Mulaya', count: 0,  duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Nicholas Mulaya', count: 38, duty: 'YES', notes: 'Day Start'},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Robinah Kasande', count: 37, duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Kalinda Fredrick', count: 44, duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Anthony Nyombi',  count: 25, duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Salim Kigundu',   count: 37, duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Cotil Delight',   count: 22, duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Ismail Matte',    count: 35, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Nicholas Mulaya', count: 19, duty: 'YES', notes: 'Day Start'},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Robinah Kasande', count: 15, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Kalinda Fredrick', count: 51, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Anthony Nyombi',  count: 19, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Salim Kigundu',   count: 21, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Cotil Delight',   count: 13, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Ismail Matte',    count: 9,  duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Nicholas Mulaya', count: 43, duty: 'YES', notes: 'Day Start'},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Robinah Kasande', count: 48, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Kalinda Fredrick', count: 69, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Anthony Nyombi',  count: 56, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Salim Kigundu',   count: 50, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Cotil Delight',   count: 18, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Ismail Matte',    count: 30, duty: 'YES', notes: ''},
+  ];
+  RAW.duplicates = [
+    {date: '2026-02-18', empNo: '000000000077339', owner1: 'Robinah Kasande', owner2: 'Anthony Nyombi', inst: 'Arua RRH'},
+    {date: '2026-02-18', empNo: '000000000726818', owner1: 'Robinah Kasande', owner2: 'Salim Kigundu', inst: 'Arua RRH'},
+    {date: '2026-02-18', empNo: '000000000727042', owner1: 'Nicholas Mulaya', owner2: 'Dilght Cotilda', inst: 'Arua RRH'},
+    {date: '2026-02-18', empNo: '000000000727684', owner1: 'Robinah Kasande', owner2: 'Kalinda Fredrick', inst: 'Arua RRH'},
+    {date: '2026-02-18', empNo: '000000000756510', owner1: 'Robinah Kasande', owner2: 'Salim Kigundu', inst: 'Arua RRH'},
+    {date: '2026-02-18', empNo: '000000001040530', owner1: 'Robinah Kasande', owner2: 'Dilght Cotilda', inst: 'Arua RRH'},
+    {date: '2026-02-18', empNo: '000000001078371', owner1: 'Kalinda Fredrick', owner2: 'Dilght Cotilda', inst: 'Arua RRH'},
+  ];
+
+  populateFilters();
+  applyFilters();
+
+  // Always auto-fetch since URLs are pre-configured
+  if(CFG.urlStats){
+    document.getElementById('cfgBar').classList.add('connected');
+    document.getElementById('cfgUrl').textContent = CFG.urlStats;
+    fetchAll();
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  FETCH FROM GOOGLE SHEETS
+// ═══════════════════════════════════════════════
+const PROXIES = [
+  url => url,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+
+async function fetchCSV(rawUrl){
+  for(const p of PROXIES){
+    try{
+      const r = await fetch(p(rawUrl), {cache: 'no-store'});
+      if(r.ok){ const t = await r.text(); if(t.length > 10) return t; }
+    }catch(e){}
+  }
+  return null;
+}
+
+function parseCSV(text){
+  if(!text) return [];
+  return text.trim().split('\n').map(line => {
+    const row = []; let f = ''; let q = false;
+    for(const ch of line){
+      if(ch === '"'){ q = !q; }
+      else if(ch === ',' && !q){ row.push(f.trim()); f = ''; }
+      else f += ch;
+    }
+    row.push(f.trim());
+    return row;
   });
+}
+
+async function fetchAll(){
+  setSyncStatus('loading');
+  let ok = false;
+
+  // Fetch DAILY_STATS
+  if(CFG.urlStats){
+    const csv = await fetchCSV(CFG.urlStats);
+    if(csv){ parseStats(parseCSV(csv)); ok = true; }
+  }
+
+  // Fetch CONFIG
+  if(CFG.urlConfig){
+    const csv = await fetchCSV(CFG.urlConfig);
+    if(csv) parseConfig(parseCSV(csv));
+  }
+
+  // Fetch DUPLICATES
+  if(CFG.urlDups){
+    const csv = await fetchCSV(CFG.urlDups);
+    if(csv) parseDups(parseCSV(csv));
+  }
+
+  if(ok){
+    setSyncStatus('live');
+    document.getElementById('lastSync').textContent = 'Synced ' + new Date().toLocaleTimeString();
+    startAutoRefresh();
+  } else {
+    setSyncStatus('err');
+    document.getElementById('lastSync').textContent = 'Sync failed — showing demo data';
+  }
+  populateFilters();
+  applyFilters();
+}
+
+function cleanDate(raw){
+  if(!raw) return "";
+  const s = String(raw).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ]/);
+  if(m) return m[1];
+  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(slash) return `${slash[3]}-${slash[2].padStart(2, "0")}-${slash[1].padStart(2, "0")}`;
+  try{ const d = new Date(s); if(!isNaN(d)) return d.toISOString().split("T")[0]; }catch(e){}
+  return s;
+}
+
+function parseStats(rows){
+  if(!rows.length) return;
+
+  // Find header row
+  let hi = -1;
+  for(let i = 0; i < Math.min(rows.length, 8); i++){
+    const cells = rows[i].map(c => String(c).toLowerCase().trim());
+    const hasInst  = cells.some(c => c === 'institution' || c === 'inst');
+    const hasOwner = cells.some(c => c.includes('owner') || c.includes('data owner'));
+    const hasCount = cells.some(c => c.includes('file') || c.includes('capture') || c.includes('count'));
+    if(hasInst && hasOwner){ hi = i; break; }
+    if(hasOwner && hasCount){ hi = i; break; }
+  }
+
+  if(hi >= 0){
+    const hdr = rows[hi].map(c => String(c).toLowerCase().trim());
+    let iDate = -1, iInst = -1, iOwner = -1, iCount = -1, iDuty = -1, iNotes = -1;
+    hdr.forEach((h, i) => {
+      if(h.includes('date') && iDate < 0) iDate = i;
+      if(h.includes('inst') && iInst < 0) iInst = i;
+      if(h.includes('owner') && iOwner < 0) iOwner = i;
+      if((h.includes('file') || h.includes('capture') || h.includes('count')) && iCount < 0) iCount = i;
+      if(h.includes('duty') && iDuty < 0) iDuty = i;
+      if(h.includes('note') && iNotes < 0) iNotes = i;
+    });
+    
+    const parsed = [];
+    for(let i = hi + 1; i < rows.length; i++){
+      const r = rows[i];
+      if(r.length < 3) continue;
+      const inst = iInst >= 0 ? String(r[iInst] || '').trim() : '';
+      const owner = iOwner >= 0 ? String(r[iOwner] || '').trim() : '';
+      const dateV = iDate >= 0 ? String(r[iDate] || '').trim() : '';
+      const cntV = iCount >= 0 ? String(r[iCount] || '') : '0';
+      if(!inst || !owner) continue;
+      if(inst.toLowerCase().includes('institution')) continue;
+      const cnt = parseFloat(cntV.replace(/,/g, ''));
+      if(isNaN(cnt)) continue;
+      parsed.push({
+        date: cleanDate(dateV), inst, owner, count: cnt,
+        duty: iDuty >= 0 ? String(r[iDuty] || 'YES') : 'YES',
+        notes: iNotes >= 0 ? String(r[iNotes] || '') : '',
+      });
+    }
+    if(parsed.length > 0) RAW.stats = parsed;
+  }
+}
+
+function parseConfig(rows){
+  const insts = [], members = [];
+  let inInstSection = false, inMemberSection = false;
+  
+  for(let i = 0; i < rows.length; i++){
+    const r = rows[i];
+    if(!r.length) continue;
+    const cell0 = String(r[0] || '').toLowerCase();
+    
+    if(cell0.includes('institution') || cell0.includes('vote')) {
+      inInstSection = true; inMemberSection = false; continue;
+    }
+    if(cell0.includes('team member') || cell0.includes('full name')) {
+      inMemberSection = true; inInstSection = false; continue;
+    }
+    
+    if(inInstSection && r.length >= 3) {
+      const name = String(r[0] || '').trim();
+      const code = String(r[1] || '').trim();
+      const target = parseFloat(String(r[2] || '').replace(/[^\d.-]/g, '')) || 0;
+      if(name && name !== 'Institution Name' && !name.includes('add more')) {
+        insts.push({name, code, target, notes: String(r[3] || '').trim()});
+      }
+    }
+    
+    if(inMemberSection && r.length >= 4) {
+      const name = String(r[0] || '').trim();
+      const short = String(r[1] || '').trim() || name.split(' ')[0];
+      const status = String(r[2] || '').trim().toUpperCase();
+      const inst = String(r[3] || '').trim();
+      if(name && name !== 'Full Name' && !name.includes('add more') && 
+         ['ACTIVE', 'OFF', 'LEAVE', 'RESIGNED'].includes(status)) {
+        members.push({name, short, status, inst, phone: String(r[4] || '').trim()});
+      }
+    }
+  }
+  
+  if(insts.length) RAW.config.institutions = insts;
+  if(members.length) RAW.config.members = members;
+}
+
+function parseDups(rows){
+  const hi = rows.findIndex(r => r.some(c => String(c).toLowerCase().includes('date')));
+  if(hi < 0) return;
+  const hdr = rows[hi].map(c => String(c).toLowerCase());
+  const col = (keywords) => {
+    for(let i = 0; i < hdr.length; i++){
+      if(keywords.some(k => hdr[i].includes(k))) return i;
+    }
+    return -1;
+  };
+  const dups = [];
+  for(let i = hi + 1; i < rows.length; i++){
+    const r = rows[i];
+    if(r.length < 3) continue;
+    const date = r[col(['date'])] || r[1] || '';
+    const empNo = r[col(['employee', 'emp'])] || r[2] || '';
+    const owner1 = r[col(['owner 1', 'owner1'])] || r[3] || '';
+    const owner2 = r[col(['owner 2', 'owner2'])] || r[4] || '';
+    const inst = r[col(['institution', 'inst'])] || r[5] || '';
+    if(empNo && owner1 && owner2) {
+      dups.push({date: cleanDate(date), empNo, owner1, owner2, inst});
+    }
+  }
+  if(dups.length) RAW.duplicates = dups;
+}
+
+// ═══════════════════════════════════════════════
+//  FILTERS & MODE
+// ═══════════════════════════════════════════════
+let currentMode = 'global';
+
+function setMode(m){
+  currentMode = m;
+  ['modeAll', 'modeInst', 'modeMember'].forEach(id => document.getElementById(id).classList.remove('active'));
+  if(m === 'global') document.getElementById('modeAll').classList.add('active');
+  if(m === 'institution') document.getElementById('modeInst').classList.add('active');
+  if(m === 'member') document.getElementById('modeMember').classList.add('active');
+  applyFilters();
+}
+
+function populateFilters(){
+  const insts = [...new Set(RAW.stats.map(s => s.inst))].filter(Boolean);
+  const members = [...new Set(RAW.stats.map(s => s.owner))].filter(Boolean);
+  const dates = [...new Set(RAW.stats.map(s => s.date))].filter(Boolean).sort().reverse();
+
+  const fi = document.getElementById('filterInst');
+  const cur = fi.value;
+  fi.innerHTML = '<option value="all">All Institutions</option>';
+  insts.forEach(i => { const o = document.createElement('option'); o.value = i; o.textContent = i; fi.appendChild(o); });
+  if(cur) fi.value = cur;
+
+  const fm = document.getElementById('filterMember');
+  const curm = fm.value;
+  fm.innerHTML = '<option value="all">All Members</option>';
+  members.forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; fm.appendChild(o); });
+  if(curm) fm.value = curm;
+
+  const fd = document.getElementById('filterDate');
+  const curd = fd.value;
+  fd.innerHTML = '<option value="all">All Dates</option>';
+  dates.forEach(d => { const o = document.createElement('option'); o.value = d; o.textContent = d; fd.appendChild(o); });
+  if(curd) fd.value = curd;
+
+  populateAdminSelects();
+}
+
+function applyFilters(){
+  const inst = document.getElementById('filterInst').value;
+  const member = document.getElementById('filterMember').value;
+  const date = document.getElementById('filterDate').value;
+
+  let data = [...RAW.stats];
+  if(inst !== 'all') data = data.filter(s => s.inst === inst);
+  if(member !== 'all') data = data.filter(s => s.owner === member);
+  if(date !== 'all') data = data.filter(s => s.date === date);
+
+  FILTERED.stats = data;
+  FILTERED.inst = inst;
+  FILTERED.member = member;
+  FILTERED.date = date;
+
+  let parts = [];
+  if(inst !== 'all') parts.push(inst);
+  if(member !== 'all') parts.push(member);
+  if(date !== 'all') parts.push(date);
+  document.getElementById('appSub').textContent = parts.length ? parts.join(' · ') : 'Global View — All Institutions';
+
+  render();
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════
+
+function renderTrend(){
+  const el = document.getElementById('trendChart');
+  const legend = document.getElementById('trendLegend');
+  if(!el) return;
+
+  const COLORS = {
+    'Arua RRH': '#2E86AB',
+    'Arua City': '#F0A500',
+    'Arua DLG': '#1A9C5B',
+    'Yumbe RRH': '#6C3483',
+  };
+  const DEFAULT_COLORS = ['#2E86AB', '#F0A500', '#1A9C5B', '#6C3483', '#E67E22', '#C0392B'];
+
+  const data = FILTERED.stats.length ? FILTERED.stats : RAW.stats;
+  const allDates = [...new Set(data.map(s => s.date).filter(Boolean))].sort();
+  if(allDates.length === 0){ el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--dim);font-size:11px">No date data available</div>'; return; }
+
+  const instNames = [...new Set(data.map(s => s.inst).filter(Boolean))];
+  const datasets = instNames.map((inst, idx) => {
+    const color = COLORS[inst] || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
+    const vals = allDates.map(d => data.filter(s => s.inst === inst && s.date === d).reduce((a, s) => a + s.count, 0));
+    return { inst, color, vals };
+  });
+
+  const totalVals = allDates.map(d => data.filter(s => s.date === d).reduce((a, s) => a + s.count, 0));
+  const W = el.clientWidth || 700, H = 110;
+  const PAD = {top: 10, right: 20, bottom: 28, left: 36};
+  const chartW = W - PAD.left - PAD.right, chartH = H - PAD.top - PAD.bottom;
+  const maxVal = Math.max(...totalVals, 1);
+  const xStep = allDates.length > 1 ? chartW / (allDates.length - 1) : chartW;
+  const toX = i => PAD.left + (allDates.length > 1 ? i * xStep : chartW / 2);
+  const toY = v => PAD.top + chartH - (v / maxVal) * chartH;
+
+  let svg = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">`;
+  [0, 0.25, 0.5, 0.75, 1].forEach(frac => {
+    const y = PAD.top + chartH * (1 - frac);
+    const lbl = Math.round(maxVal * frac);
+    svg += `<line x1="${PAD.left}" y1="${y.toFixed(1)}" x2="${W - PAD.right}" y2="${y.toFixed(1)}"
+      stroke="rgba(30,53,80,0.6)" stroke-width="1" stroke-dasharray="${frac === 0 ? '0' : '4,4'}"/>`;
+    svg += `<text x="${PAD.left - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end"
+      font-size="8" fill="#3D6080" font-family="DM Mono,monospace">${lbl}</text>`;
+  });
+
+  datasets.forEach(ds => {
+    if(ds.vals.every(v => v === 0)) return;
+    const pts = ds.vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
+    const area = `${toX(0).toFixed(1)},${(PAD.top + chartH).toFixed(1)} ${pts.join(' ')} ${toX(allDates.length - 1).toFixed(1)},${(PAD.top + chartH).toFixed(1)}`;
+    svg += `<polygon points="${area}" fill="${ds.color}" opacity="0.08"/>`;
+    svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="${ds.color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`;
+  });
+
+  if(datasets.length > 1){
+    const pts = totalVals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
+    svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="#E8F4F8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    totalVals.forEach((v, i) => {
+      svg += `<circle cx="${toX(i).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3" fill="#E8F4F8"/>`;
+      svg += `<text x="${toX(i).toFixed(1)}" y="${(toY(v) - 7).toFixed(1)}" text-anchor="middle" font-size="8" fill="#E8F4F8" font-family="DM Mono,monospace" font-weight="600">${v}</text>`;
+    });
+  } else if(datasets.length === 1){
+    const ds = datasets[0];
+    const pts = ds.vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
+    ds.vals.forEach((v, i) => {
+      svg += `<circle cx="${toX(i).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3" fill="${ds.color}"/>`;
+      svg += `<text x="${toX(i).toFixed(1)}" y="${(toY(v) - 7).toFixed(1)}" text-anchor="middle" font-size="8" fill="${ds.color}" font-family="DM Mono,monospace" font-weight="600">${v}</text>`;
+    });
+  }
+
+  allDates.forEach((d, i) => {
+    const lbl = d.slice(5);
+    svg += `<text x="${toX(i).toFixed(1)}" y="${(PAD.top + chartH + 16).toFixed(1)}" text-anchor="middle"
+      font-size="8" fill="#3D6080" font-family="DM Mono,monospace">${lbl}</text>`;
+  });
+
+  svg += '</svg>';
+  el.innerHTML = svg;
+
+  if(legend){
+    let legHTML = '';
+    if(datasets.length > 1){
+      legHTML += `<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)">
+        <div style="width:14px;height:2px;background:#E8F4F8;border-radius:2px"></div>Total</div>`;
+    }
+    datasets.filter(ds => ds.vals.some(v => v > 0)).forEach(ds => {
+      legHTML += `<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)">
+        <div style="width:10px;height:10px;border-radius:50%;background:${ds.color}"></div>${ds.inst.replace('Arua ', '')}</div>`;
+    });
+    legend.innerHTML = legHTML;
+  }
 }
 
 function renderPredictions() {
   const grid = document.getElementById('predictionGrid');
   if (!grid) return;
-  
   grid.innerHTML = '';
   const predictions = calculatePredictions();
   
@@ -892,7 +1295,7 @@ function renderPredictions() {
           <span class="${confidenceClass}">${pred.confidence}</span>
         </div>
         <div class="pred-details">
-          <span>📊 ${pred.details.remaining.toLocaleString()} files left</span>
+          <span>📊 ${pred.details.remaining.toLocaleString()} left</span>
           <span>⚡ ${pred.details.rate}/day</span>
         </div>
         <div class="pred-progress">
@@ -901,510 +1304,17 @@ function renderPredictions() {
         <div class="pred-stats">
           <span>👥 ${pred.details.teamSize} active</span>
           <span>📈 ${pred.details.dataPoints} days</span>
-          <span>🎯 ${pct}% done</span>
+          <span>🎯 ${pct}%</span>
         </div>
       `;
     }
-    
     grid.appendChild(card);
   });
 }
 
-// ═══════════════════════════════════════════════
-//  LOCK / UNLOCK
-// ═══════════════════════════════════════════════
-function tryUnlock(){
-  const v = document.getElementById('lockInput').value.trim();
-  const err = document.getElementById('lockError');
-  if(v === teamPass() || v === adminPass()){
-    if(v === adminPass()) isAdmin = true;
-    document.getElementById('lockScreen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    if(isAdmin){
-      document.getElementById('adminBtn').style.display = 'flex';
-      document.getElementById('connectBtn').style.display = 'flex';
-      document.getElementById('cfgBar').style.display = 'flex';
-    }
-    initApp();
-  } else {
-    err.textContent = '✗ Incorrect passcode. Try again.';
-    document.getElementById('lockInput').value = '';
-    setTimeout(()=>err.textContent='', 3000);
-  }
-}
-document.getElementById('lockInput').addEventListener('keydown', e => { if(e.key==='Enter') tryUnlock(); });
-
-function lockApp(){
-  isAdmin = false;
-  document.getElementById('lockInput').value = '';
-  document.getElementById('lockError').textContent = '';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('lockScreen').style.display = 'flex';
-  document.getElementById('adminBtn').style.display = 'none';
-  document.getElementById('connectBtn').style.display = 'none';
-  document.getElementById('cfgBar').style.display = 'none';
-  stopAutoRefresh();
-}
-
-// ═══════════════════════════════════════════════
-//  INIT
-// ═══════════════════════════════════════════════
-function initApp(){
-  // load defaults
-  RAW.config.institutions = [
-    {name:'Arua RRH',  code:'RRH',   target:249,  notes:'Regional Referral Hospital'},
-    {name:'Arua City', code:'CITY',  target:2253, notes:'City Council'},
-    {name:'Arua DLG',  code:'DLG',   target:0,    notes:'District Local Government'},
-    {name:'Yumbe RRH', code:'YUMBE', target:0,    notes:'Yumbe Referral Hospital'},
-  ];
-  RAW.config.members = [
-    {name:'Nicholas Mulaya', short:'Nicholas', status:'ACTIVE', inst:'Arua RRH'},
-    {name:'Robinah Kasande', short:'Robinah',  status:'ACTIVE', inst:'Arua RRH'},
-    {name:'Kalinda Fredrick',short:'Fredrick', status:'ACTIVE', inst:'Arua RRH'},
-    {name:'Anthony Nyombi',  short:'Anthony',  status:'ACTIVE', inst:'Arua RRH'},
-    {name:'Salim Kigundu',   short:'Salim',    status:'ACTIVE', inst:'Arua RRH'},
-    {name:'Dilght Cotilda',  short:'Delight',  status:'ACTIVE', inst:'Arua RRH'},
-    {name:'Ismail Matte',    short:'Ismail',   status:'ACTIVE', inst:'Arua RRH', phone:'0782475028'},
-    {name:'Dan Ndyamureeba', short:'Dan',      status:'OFF',    inst:'Arua RRH'},
-  ];
-  RAW.stats = [
-    {date:'2026-02-17',inst:'Arua RRH',owner:'Nicholas Mulaya', count:0,  duty:'YES',notes:''},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Nicholas Mulaya', count:38, duty:'YES',notes:'Day Start'},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Robinah Kasande', count:37, duty:'YES',notes:''},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Kalinda Fredrick',count:44, duty:'YES',notes:''},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Anthony Nyombi',  count:25, duty:'YES',notes:''},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Salim Kigundu',   count:37, duty:'YES',notes:''},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Cotil Delight',   count:22, duty:'YES',notes:''},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Ismail Matte',    count:35, duty:'YES',notes:''},
-    {date:'2026-02-19',inst:'Arua City',owner:'Nicholas Mulaya', count:19, duty:'YES',notes:'Day Start'},
-    {date:'2026-02-19',inst:'Arua City',owner:'Robinah Kasande', count:15, duty:'YES',notes:''},
-    {date:'2026-02-19',inst:'Arua City',owner:'Kalinda Fredrick',count:51, duty:'YES',notes:''},
-    {date:'2026-02-19',inst:'Arua City',owner:'Anthony Nyombi',  count:19, duty:'YES',notes:''},
-    {date:'2026-02-19',inst:'Arua City',owner:'Salim Kigundu',   count:21, duty:'YES',notes:''},
-    {date:'2026-02-19',inst:'Arua City',owner:'Cotil Delight',   count:13, duty:'YES',notes:''},
-    {date:'2026-02-19',inst:'Arua City',owner:'Ismail Matte',    count:9,  duty:'YES',notes:''},
-    {date:'2026-02-20',inst:'Arua City',owner:'Nicholas Mulaya', count:43, duty:'YES',notes:'Day Start'},
-    {date:'2026-02-20',inst:'Arua City',owner:'Robinah Kasande', count:48, duty:'YES',notes:''},
-    {date:'2026-02-20',inst:'Arua City',owner:'Kalinda Fredrick',count:69, duty:'YES',notes:''},
-    {date:'2026-02-20',inst:'Arua City',owner:'Anthony Nyombi',  count:56, duty:'YES',notes:''},
-    {date:'2026-02-20',inst:'Arua City',owner:'Salim Kigundu',   count:50, duty:'YES',notes:''},
-    {date:'2026-02-20',inst:'Arua City',owner:'Cotil Delight',   count:18, duty:'YES',notes:''},
-    {date:'2026-02-20',inst:'Arua City',owner:'Ismail Matte',    count:30, duty:'YES',notes:''},
-  ];
-  RAW.duplicates = [
-    {date:'2026-02-18',empNo:'000000000077339',owner1:'Robinah Kasande', owner2:'Anthony Nyombi',  inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'000000000726818',owner1:'Robinah Kasande', owner2:'Salim Kigundu',   inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'000000000727042',owner1:'Nicholas Mulaya', owner2:'Dilght Cotilda',  inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'000000000727684',owner1:'Robinah Kasande', owner2:'Kalinda Fredrick',inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'000000000756510',owner1:'Robinah Kasande', owner2:'Salim Kigundu',   inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'000000001040530',owner1:'Robinah Kasande', owner2:'Dilght Cotilda',  inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'000000001078371',owner1:'Kalinda Fredrick',owner2:'Dilght Cotilda',  inst:'Arua RRH'},
-  ];
-
-  populateFilters();
-  applyFilters();
-
-  // Always auto-fetch since URLs are pre-configured
-  if(CFG.urlStats){
-    document.getElementById('cfgBar').classList.add('connected');
-    document.getElementById('cfgUrl').textContent = CFG.urlStats;
-    fetchAll();
-  }
-}
-
-// ═══════════════════════════════════════════════
-//  FETCH FROM GOOGLE SHEETS
-// ═══════════════════════════════════════════════
-const PROXIES = [
-  url => url,
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-];
-
-async function fetchCSV(rawUrl){
-  for(const p of PROXIES){
-    try{
-      const r = await fetch(p(rawUrl), {cache:'no-store'});
-      if(r.ok){ const t = await r.text(); if(t.length>10) return t; }
-    }catch(e){}
-  }
-  return null;
-}
-
-function parseCSV(text){
-  if(!text) return [];
-  return text.trim().split('\n').map(line=>{
-    const row=[]; let f=''; let q=false;
-    for(const ch of line){
-      if(ch==='"'){q=!q}
-      else if(ch===','&&!q){row.push(f.trim());f=''}
-      else f+=ch;
-    }
-    row.push(f.trim());
-    return row;
-  });
-}
-
-async function fetchAll(){
-  setSyncStatus('loading');
-  let ok = false;
-
-  // Fetch DAILY_STATS
-  if(CFG.urlStats){
-    const csv = await fetchCSV(CFG.urlStats);
-    if(csv){ parseStats(parseCSV(csv)); ok=true; }
-  }
-
-  // Fetch CONFIG
-  if(CFG.urlConfig){
-    const csv = await fetchCSV(CFG.urlConfig);
-    if(csv) parseConfig(parseCSV(csv));
-  }
-
-  // Fetch DUPLICATES
-  if(CFG.urlDups){
-    const csv = await fetchCSV(CFG.urlDups);
-    if(csv) parseDups(parseCSV(csv));
-  }
-
-  if(ok){
-    setSyncStatus('live');
-    document.getElementById('lastSync').textContent = 'Synced '+new Date().toLocaleTimeString();
-    startAutoRefresh();
-  } else {
-    setSyncStatus('err');
-    document.getElementById('lastSync').textContent = 'Sync failed — showing demo data';
-  }
-  populateFilters();
-  applyFilters();
-}
-
-function cleanDate(raw){
-  if(!raw) return "";
-  const s = String(raw).trim();
-  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ]/);
-  if(m) return m[1];
-  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(slash) return `${slash[3]}-${slash[2].padStart(2,"0")}-${slash[1].padStart(2,"0")}`;
-  try{ const d=new Date(s); if(!isNaN(d)) return d.toISOString().split("T")[0]; }catch(e){}
-  return s;
-}
-
-function parseStats(rows){
-  if(!rows.length) return;
-
-  // First try to find a proper header row
-  let hi = -1;
-  for(let i=0;i<Math.min(rows.length,8);i++){
-    const cells = rows[i].map(c=>String(c).toLowerCase().trim());
-    const hasInst  = cells.some(c=>c==='institution'||c==='inst');
-    const hasOwner = cells.some(c=>c.includes('owner')||c.includes('data owner'));
-    const hasCount = cells.some(c=>c.includes('file')||c.includes('capture')||c.includes('count'));
-    if(hasInst && hasOwner){ hi=i; break; }
-    if(hasOwner && hasCount){ hi=i; break; }
-  }
-
-  let parsed = [];
-
-  if(hi >= 0){
-    // Use header-based parsing
-    const hdr = rows[hi].map(c=>String(c).toLowerCase().trim());
-  
-    // Find columns by position
-    let iDate=-1, iInst=-1, iOwner=-1, iCount=-1, iDuty=-1, iNotes=-1;
-    hdr.forEach((h,i)=>{
-      if(h.includes('date') && iDate<0)    iDate=i;
-      if(h.includes('inst') && iInst<0)    iInst=i;
-      if(h.includes('owner') && iOwner<0)  iOwner=i;
-      if((h.includes('file')||h.includes('capture')||h.includes('count')) && iCount<0) iCount=i;
-      if(h.includes('duty') && iDuty<0)    iDuty=i;
-      if(h.includes('note') && iNotes<0)   iNotes=i;
-    });
-  
-    for(let i=hi+1;i<rows.length;i++){
-      const r=rows[i];
-      if(r.length < 3) continue;
-      const inst  = iInst>=0  ? String(r[iInst] ||'').trim() : '';
-      const owner = iOwner>=0 ? String(r[iOwner]||'').trim() : '';
-      const dateV = iDate>=0  ? String(r[iDate] ||'').trim() : '';
-      const cntV  = iCount>=0 ? String(r[iCount]||'')        : '0';
-      if(!inst||!owner) continue;
-      if(inst.toLowerCase().includes('institution')) continue;
-      if(owner.toLowerCase().includes('data owner')) continue;
-      const cnt = parseFloat(cntV.replace(/,/g,''));
-      if(isNaN(cnt)) continue;
-      parsed.push({
-        date: cleanDate(dateV), inst, owner, count:cnt,
-        duty:  iDuty>=0  ? String(r[iDuty] ||'YES') : 'YES',
-        notes: iNotes>=0 ? String(r[iNotes]||'')    : '',
-      });
-    }
-  }
-
-  if(parsed.length>0){
-      RAW.stats=parsed;
-  }
-}
-
-function parseConfig(rows){
-  const insts=[], members=[];
-  
-  // Find the institution section
-  let inInstSection = false;
-  let inMemberSection = false;
-  
-  for(let i=0;i<rows.length;i++){
-    const r = rows[i];
-    if(!r.length) continue;
-    const cell0 = String(r[0] || '').toLowerCase();
-    
-    // Detect sections
-    if(cell0.includes('institution') || cell0.includes('vote')) {
-      inInstSection = true;
-      inMemberSection = false;
-      continue;
-    }
-    if(cell0.includes('team member') || cell0.includes('full name')) {
-      inMemberSection = true;
-      inInstSection = false;
-      continue;
-    }
-    
-    // Parse institutions
-    if(inInstSection && r.length >= 3) {
-      const name = String(r[0] || '').trim();
-      const code = String(r[1] || '').trim();
-      const target = parseFloat(String(r[2] || '').replace(/[^\d.-]/g, '')) || 0;
-      if(name && name !== 'Institution Name' && !name.includes('add more')) {
-        insts.push({name, code, target, notes: String(r[3] || '').trim()});
-      }
-    }
-    
-    // Parse members
-    if(inMemberSection && r.length >= 4) {
-      const name = String(r[0] || '').trim();
-      const short = String(r[1] || '').trim() || name.split(' ')[0];
-      const status = String(r[2] || '').trim().toUpperCase();
-      const inst = String(r[3] || '').trim();
-      if(name && name !== 'Full Name' && !name.includes('add more') && 
-         ['ACTIVE','OFF','LEAVE','RESIGNED'].includes(status)) {
-        members.push({name, short, status, inst, phone: String(r[4] || '').trim()});
-      }
-    }
-  }
-  
-  if(insts.length) RAW.config.institutions = insts;
-  if(members.length) RAW.config.members = members;
-}
-
-function parseDups(rows){
-  const hi = rows.findIndex(r=>r.some(c=>String(c).toLowerCase().includes('date')));
-  if(hi<0) return;
-  const hdr=rows[hi].map(c=>String(c).toLowerCase());
-  const col = (keywords) => {
-    for(let i=0;i<hdr.length;i++){
-      if(keywords.some(k => hdr[i].includes(k))) return i;
-    }
-    return -1;
-  };
-  const dups=[];
-  for(let i=hi+1;i<rows.length;i++){
-    const r=rows[i];
-    if(r.length < 3) continue;
-    const date = r[col(['date'])] || r[1] || '';
-    const empNo = r[col(['employee', 'emp'])] || r[2] || '';
-    const owner1 = r[col(['owner 1', 'owner1'])] || r[3] || '';
-    const owner2 = r[col(['owner 2', 'owner2'])] || r[4] || '';
-    const inst = r[col(['institution', 'inst'])] || r[5] || '';
-    if(empNo && owner1 && owner2) {
-      dups.push({date: cleanDate(date), empNo, owner1, owner2, inst});
-    }
-  }
-  if(dups.length) RAW.duplicates=dups;
-}
-
-// ═══════════════════════════════════════════════
-//  FILTERS & MODE
-// ═══════════════════════════════════════════════
-let currentMode = 'global';
-
-function setMode(m){
-  currentMode=m;
-  ['modeAll','modeInst','modeMember'].forEach(id=>document.getElementById(id).classList.remove('active'));
-  if(m==='global') document.getElementById('modeAll').classList.add('active');
-  if(m==='institution') document.getElementById('modeInst').classList.add('active');
-  if(m==='member') document.getElementById('modeMember').classList.add('active');
-  applyFilters();
-}
-
-function populateFilters(){
-  const insts=[...new Set(RAW.stats.map(s=>s.inst))].filter(Boolean);
-  const members=[...new Set(RAW.stats.map(s=>s.owner))].filter(Boolean);
-  const dates=[...new Set(RAW.stats.map(s=>s.date))].filter(Boolean).sort().reverse();
-
-  const fi=document.getElementById('filterInst');
-  const cur=fi.value;
-  fi.innerHTML='<option value="all">All Institutions</option>';
-  insts.forEach(i=>{ const o=document.createElement('option');o.value=i;o.textContent=i;fi.appendChild(o); });
-  if(cur) fi.value=cur;
-
-  const fm=document.getElementById('filterMember');
-  const curm=fm.value;
-  fm.innerHTML='<option value="all">All Members</option>';
-  members.forEach(m=>{ const o=document.createElement('option');o.value=m;o.textContent=m;fm.appendChild(o); });
-  if(curm) fm.value=curm;
-
-  const fd=document.getElementById('filterDate');
-  const curd=fd.value;
-  fd.innerHTML='<option value="all">All Dates</option>';
-  dates.forEach(d=>{ const o=document.createElement('option');o.value=d;o.textContent=d;fd.appendChild(o); });
-  if(curd) fd.value=curd;
-
-  // Admin selects
-  populateAdminSelects();
-}
-
-function applyFilters(){
-  const inst   = document.getElementById('filterInst').value;
-  const member = document.getElementById('filterMember').value;
-  const date   = document.getElementById('filterDate').value;
-
-  let data = [...RAW.stats];
-  if(inst!=='all')   data=data.filter(s=>s.inst===inst);
-  if(member!=='all') data=data.filter(s=>s.owner===member);
-  if(date!=='all')   data=data.filter(s=>s.date===date);
-
-  FILTERED.stats=data;
-  FILTERED.inst=inst;
-  FILTERED.member=member;
-  FILTERED.date=date;
-
-  // subtitle
-  let parts=[];
-  if(inst!=='all') parts.push(inst);
-  if(member!=='all') parts.push(member);
-  if(date!=='all') parts.push(date);
-  document.getElementById('appSub').textContent = parts.length ? parts.join(' · ') : 'Global View — All Institutions';
-
-  render();
-}
-
-// ═══════════════════════════════════════════════
-//  RENDER
-// ═══════════════════════════════════════════════
-
-// ── TREND CHART ──────────────────────────────────────────────
-function renderTrend(){
-  const el = document.getElementById('trendChart');
-  const legend = document.getElementById('trendLegend');
-  if(!el) return;
-
-  // Build per-institution daily data
-  const COLORS = {
-    'Arua RRH':  '#2E86AB',
-    'Arua City': '#F0A500',
-    'Arua DLG':  '#1A9C5B',
-    'Yumbe RRH': '#6C3483',
-  };
-  const DEFAULT_COLORS = ['#2E86AB','#F0A500','#1A9C5B','#6C3483','#E67E22','#C0392B'];
-
-  const data = FILTERED.stats.length ? FILTERED.stats : RAW.stats;
-
-  // Get all unique dates sorted
-  const allDates = [...new Set(data.map(s=>s.date).filter(Boolean))].sort();
-  if(allDates.length === 0){ el.innerHTML='<div style="text-align:center;padding:40px;color:var(--dim);font-size:11px">No date data available</div>'; return; }
-
-  // Get institutions in scope
-  const instNames = [...new Set(data.map(s=>s.inst).filter(Boolean))];
-
-  // Build dataset per institution per date
-  const datasets = instNames.map((inst,idx)=>{
-    const color = COLORS[inst] || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
-    const vals  = allDates.map(d=> data.filter(s=>s.inst===inst&&s.date===d).reduce((a,s)=>a+s.count,0));
-    return { inst, color, vals };
-  });
-
-  // Also build combined total line
-  const totalVals = allDates.map(d=> data.filter(s=>s.date===d).reduce((a,s)=>a+s.count,0));
-
-  const W=el.clientWidth||700, H=110;
-  const PAD={top:10,right:20,bottom:28,left:36};
-  const chartW=W-PAD.left-PAD.right, chartH=H-PAD.top-PAD.bottom;
-
-  const maxVal = Math.max(...totalVals, 1);
-  const xStep  = allDates.length>1 ? chartW/(allDates.length-1) : chartW;
-
-  const toX = i  => PAD.left + (allDates.length>1 ? i*xStep : chartW/2);
-  const toY = v  => PAD.top  + chartH - (v/maxVal)*chartH;
-
-  // Build SVG
-  let svg = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">`;
-
-  // Grid lines
-  [0,.25,.5,.75,1].forEach(frac=>{
-    const y = PAD.top + chartH*(1-frac);
-    const lbl = Math.round(maxVal*frac);
-    svg += `<line x1="${PAD.left}" y1="${y.toFixed(1)}" x2="${W-PAD.right}" y2="${y.toFixed(1)}"
-      stroke="rgba(30,53,80,0.6)" stroke-width="1" stroke-dasharray="${frac===0?'0':'4,4'}"/>`;
-    svg += `<text x="${PAD.left-4}" y="${(y+3).toFixed(1)}" text-anchor="end"
-      font-size="8" fill="#3D6080" font-family="DM Mono,monospace">${lbl}</text>`;
-  });
-
-  // Per-institution area + line
-  datasets.forEach(ds=>{
-    if(ds.vals.every(v=>v===0)) return;
-    const pts = ds.vals.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
-    const area = `${toX(0).toFixed(1)},${(PAD.top+chartH).toFixed(1)} ${pts.join(' ')} ${toX(allDates.length-1).toFixed(1)},${(PAD.top+chartH).toFixed(1)}`;
-    svg += `<polygon points="${area}" fill="${ds.color}" opacity="0.08"/>`;
-    svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="${ds.color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`;
-  });
-
-  // Total line (bold)
-  if(datasets.length > 1){
-    const pts = totalVals.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
-    svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="#E8F4F8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-    totalVals.forEach((v,i)=>{
-      svg += `<circle cx="${toX(i).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3" fill="#E8F4F8"/>`;
-      svg += `<text x="${toX(i).toFixed(1)}" y="${(toY(v)-7).toFixed(1)}" text-anchor="middle" font-size="8" fill="#E8F4F8" font-family="DM Mono,monospace" font-weight="600">${v}</text>`;
-    });
-  } else if(datasets.length===1){
-    const ds=datasets[0];
-    const pts = ds.vals.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
-    ds.vals.forEach((v,i)=>{
-      svg += `<circle cx="${toX(i).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3" fill="${ds.color}"/>`;
-      svg += `<text x="${toX(i).toFixed(1)}" y="${(toY(v)-7).toFixed(1)}" text-anchor="middle" font-size="8" fill="${ds.color}" font-family="DM Mono,monospace" font-weight="600">${v}</text>`;
-    });
-  }
-
-  // X-axis date labels
-  allDates.forEach((d,i)=>{
-    const lbl = d.slice(5); // MM-DD
-    svg += `<text x="${toX(i).toFixed(1)}" y="${(PAD.top+chartH+16).toFixed(1)}" text-anchor="middle"
-      font-size="8" fill="#3D6080" font-family="DM Mono,monospace">${lbl}</text>`;
-  });
-
-  svg += '</svg>';
-  el.innerHTML = svg;
-
-  // Legend
-  if(legend){
-    let legHTML = '';
-    if(datasets.length > 1){
-      legHTML += `<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)">
-        <div style="width:14px;height:2px;background:#E8F4F8;border-radius:2px"></div>Total</div>`;
-    }
-    datasets.filter(ds=>ds.vals.some(v=>v>0)).forEach(ds=>{
-      legHTML += `<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)">
-        <div style="width:10px;height:10px;border-radius:50%;background:${ds.color}"></div>${ds.inst.replace('Arua ','')}</div>`;
-    });
-    legend.innerHTML = legHTML;
-  }
-}
-
 function render(){
   renderKPIs();
-  renderPredictions(); // New prediction cards
+  renderPredictions();
   renderProgress();
   renderTrend();
   renderEntries();
@@ -1413,102 +1323,87 @@ function render(){
 }
 
 function getInstStats(instName, data){
-  const cfg = RAW.config.institutions.find(i=>i.name===instName)||{target:0};
-  const captured = data.filter(s=>s.inst===instName).reduce((a,s)=>a+s.count,0);
-  const target = cfg.target||0;
-  return { target, captured, balance:Math.max(0,target-captured), pct:target>0?captured/target:0 };
+  const cfg = RAW.config.institutions.find(i => i.name === instName) || {target: 0};
+  const captured = data.filter(s => s.inst === instName).reduce((a, s) => a + s.count, 0);
+  const target = cfg.target || 0;
+  return { target, captured, balance: Math.max(0, target - captured), pct: target > 0 ? captured / target : 0 };
 }
 
 function renderKPIs(){
   const g = document.getElementById('kpiGrid');
-  g.innerHTML='';
+  g.innerHTML = '';
 
-  const isFiltered   = FILTERED.inst!=='all' || FILTERED.member!=='all' || FILTERED.date!=='all';
+  const isFiltered = FILTERED.inst !== 'all' || FILTERED.member !== 'all' || FILTERED.date !== 'all';
   const filteredData = FILTERED.stats;
-  const allData      = RAW.stats;
+  const allData = RAW.stats;
+  const scopedData = isFiltered ? filteredData : allData;
 
-  // When a filter is active, scope the KPIs to the filtered data
-  const scopedData    = isFiltered ? filteredData : allData;
-
-  // Institutions in scope
-  const scopedInsts = FILTERED.inst!=='all'
-    ? RAW.config.institutions.filter(i=>i.name===FILTERED.inst)
+  const scopedInsts = FILTERED.inst !== 'all'
+    ? RAW.config.institutions.filter(i => i.name === FILTERED.inst)
     : RAW.config.institutions;
 
-  // Totals scoped to current filter
-  const scopedTarget   = scopedInsts.reduce((a,i)=>a+i.target, 0);
-  const scopedCaptured = scopedData.reduce((a,s)=>a+s.count, 0);
-  const scopedBalance  = Math.max(0, scopedTarget - scopedCaptured);
-  const scopedPct      = scopedTarget>0 ? scopedCaptured/scopedTarget : 0;
+  const scopedTarget = scopedInsts.reduce((a, i) => a + i.target, 0);
+  const scopedCaptured = scopedData.reduce((a, s) => a + s.count, 0);
+  const scopedBalance = Math.max(0, scopedTarget - scopedCaptured);
+  const scopedPct = scopedTarget > 0 ? scopedCaptured / scopedTarget : 0;
 
-  // Duplicates scoped to institution filter
-  const scopedDups = FILTERED.inst!=='all'
-    ? RAW.duplicates.filter(d=>d.inst===FILTERED.inst)
+  const scopedDups = FILTERED.inst !== 'all'
+    ? RAW.duplicates.filter(d => d.inst === FILTERED.inst)
     : RAW.duplicates;
 
-  // Members scoped to institution filter — include both CONFIG and data-based members
   let scopedMembers = [];
-  if(FILTERED.inst!=='all') {
-    // Members from CONFIG for this institution
-    scopedMembers = RAW.config.members.filter(m=>m.inst===FILTERED.inst);
-    // Also include anyone with data in this institution
-    const membersWithData = [...new Set(RAW.stats.filter(s=>s.inst===FILTERED.inst).map(s=>s.owner))];
-    membersWithData.forEach(name=>{
-      if(!scopedMembers.some(m=>matchMemberName(name, m))) {
-        scopedMembers.push({name, short:name.split(' ')[0], status:'ACTIVE', inst:FILTERED.inst});
+  if(FILTERED.inst !== 'all') {
+    scopedMembers = RAW.config.members.filter(m => m.inst === FILTERED.inst);
+    const membersWithData = [...new Set(RAW.stats.filter(s => s.inst === FILTERED.inst).map(s => s.owner))];
+    membersWithData.forEach(name => {
+      if(!scopedMembers.some(m => matchMemberName(name, m))) {
+        scopedMembers.push({name, short: name.split(' ')[0], status: 'ACTIVE', inst: FILTERED.inst});
       }
     });
   } else {
     scopedMembers = [...RAW.config.members];
-    // Also include any data owners not in CONFIG
-    const dataOwners = [...new Set(RAW.stats.map(s=>s.owner).filter(Boolean))];
-    dataOwners.forEach(name=>{
-      if(!scopedMembers.some(m=>matchMemberName(name, m))) {
-        scopedMembers.push({name, short:name.split(' ')[0], status:'ACTIVE', inst:''});
+    const dataOwners = [...new Set(RAW.stats.map(s => s.owner).filter(Boolean))];
+    dataOwners.forEach(name => {
+      if(!scopedMembers.some(m => matchMemberName(name, m))) {
+        scopedMembers.push({name, short: name.split(' ')[0], status: 'ACTIVE', inst: ''});
       }
     });
   }
   
-  const activeMembers = scopedMembers.filter(m=>m.status==='ACTIVE').length;
-
-  // Filter label for sub text
-  const filterLabel = FILTERED.inst!=='all' ? FILTERED.inst
-    : FILTERED.member!=='all' ? FILTERED.member
+  const activeMembers = scopedMembers.filter(m => m.status === 'ACTIVE').length;
+  const filterLabel = FILTERED.inst !== 'all' ? FILTERED.inst
+    : FILTERED.member !== 'all' ? FILTERED.member
     : 'All Institutions';
 
-  // Build daily sparkline data (totals per date)
   const dateMap = {};
-  scopedData.forEach(s=>{ dateMap[s.date]=(dateMap[s.date]||0)+s.count; });
+  scopedData.forEach(s => { dateMap[s.date] = (dateMap[s.date] || 0) + s.count; });
   const sortedDates = Object.keys(dateMap).filter(Boolean).sort();
-  const sparkVals   = sortedDates.map(d=>dateMap[d]);
-
-  // Daily captured per date for balance sparkline (inverted)
-  const balSpark = sparkVals.map((v,i)=>{
-    const cumul = sparkVals.slice(0,i+1).reduce((a,b)=>a+b,0);
+  const sparkVals = sortedDates.map(d => dateMap[d]);
+  const balSpark = sparkVals.map((v, i) => {
+    const cumul = sparkVals.slice(0, i + 1).reduce((a, b) => a + b, 0);
     return Math.max(0, scopedTarget - cumul);
   });
 
   const cards = [
-    {icon:'📦', lbl:'Total Captured',    val:scopedCaptured.toLocaleString(), sub:`Target: ${scopedTarget.toLocaleString()} · ${filterLabel}`, ac:'--teal',   pct:scopedPct,  sparkData:sparkVals},
-    {icon:'📋', lbl:'Total Balance',     val:scopedBalance.toLocaleString(),  sub:`Files remaining · ${filterLabel}`,                          ac:'--orange', sparkData:balSpark},
-    {icon:'📈', lbl:'Overall Progress',  val:(scopedPct*100).toFixed(1)+'%', sub:`${filterLabel}`,                                             ac:'--purple', pct:scopedPct,  sparkData:sparkVals},
-    {icon:'⚠️', lbl:'Duplicates Flagged',val:scopedDups.length,              sub:'Need resolution',                                            ac:'--red'},
-    {icon:'👥', lbl:'Active Members',    val:activeMembers,                  sub:`of ${scopedMembers.length} total`,                           ac:'--green'},
+    {icon: '📦', lbl: 'Total Captured', val: scopedCaptured.toLocaleString(), sub: `Target: ${scopedTarget.toLocaleString()} · ${filterLabel}`, ac: '--teal', pct: scopedPct, sparkData: sparkVals},
+    {icon: '📋', lbl: 'Total Balance', val: scopedBalance.toLocaleString(), sub: `Files remaining · ${filterLabel}`, ac: '--orange', sparkData: balSpark},
+    {icon: '📈', lbl: 'Overall Progress', val: (scopedPct * 100).toFixed(1) + '%', sub: filterLabel, ac: '--purple', pct: scopedPct, sparkData: sparkVals},
+    {icon: '⚠️', lbl: 'Duplicates Flagged', val: scopedDups.length, sub: 'Need resolution', ac: '--red'},
+    {icon: '👥', lbl: 'Active Members', val: activeMembers, sub: `of ${scopedMembers.length} total`, ac: '--green'},
   ];
 
-  cards.forEach(c=>{
-    const pct        = c.pct!==undefined ? c.pct : null;
-    const badgeClass = pct===null?'b-blue':pct>=1?'b-green':pct>=.75?'b-blue':pct>=.4?'b-orange':'b-red';
-    const badgeTxt   = pct===null?'':pct>=1?'✅ Done':pct>=.75?`🔵 ${(pct*100).toFixed(0)}%`:`⚠ ${(pct*100).toFixed(0)}%`;
+  cards.forEach(c => {
+    const pct = c.pct !== undefined ? c.pct : null;
+    const badgeClass = pct === null ? 'b-blue' : pct >= 1 ? 'b-green' : pct >= 0.75 ? 'b-blue' : pct >= 0.4 ? 'b-orange' : 'b-red';
+    const badgeTxt = pct === null ? '' : pct >= 1 ? '✅ Done' : pct >= 0.75 ? `🔵 ${(pct * 100).toFixed(0)}%` : `⚠ ${(pct * 100).toFixed(0)}%`;
 
-    // Build donut SVG if pct available
     let donut = '';
     if(pct !== null){
-      const r = 22, circ = 2*Math.PI*r;
-      const filled = Math.min(pct,1)*circ;
-      const acMap = {'--teal':'#2E86AB','--orange':'#E67E22','--purple':'#6C3483','--red':'#C0392B','--green':'#1A9C5B'};
+      const r = 22, circ = 2 * Math.PI * r;
+      const filled = Math.min(pct, 1) * circ;
+      const acMap = {'--teal': '#2E86AB', '--orange': '#E67E22', '--purple': '#6C3483', '--red': '#C0392B', '--green': '#1A9C5B'};
       const stroke = acMap[c.ac] || '#2E86AB';
-      const pctTxt = pct>=1?'100%':(pct*100).toFixed(0)+'%';
+      const pctTxt = pct >= 1 ? '100%' : (pct * 100).toFixed(0) + '%';
       donut = `<div class="donut-wrap">
         <svg class="donut-svg" viewBox="0 0 54 54">
           <circle class="donut-bg" cx="27" cy="27" r="${r}"/>
@@ -1521,27 +1416,26 @@ function renderKPIs(){
       </div>`;
     }
 
-    // Sparkline from daily stats grouped by date
     let spark = '';
     if(c.sparkData && c.sparkData.length > 1){
       const vals = c.sparkData;
-      const mx = Math.max(...vals,1);
-      const W=120, H=32;
-      const pts = vals.map((v,i)=>{
-        const x = (i/(vals.length-1))*W;
-        const y = H - (v/mx)*H;
+      const mx = Math.max(...vals, 1);
+      const W = 120, H = 32;
+      const pts = vals.map((v, i) => {
+        const x = (i / (vals.length - 1)) * W;
+        const y = H - (v / mx) * H;
         return `${x.toFixed(1)},${y.toFixed(1)}`;
       });
-      const acMap={'--teal':'#2E86AB','--orange':'#E67E22','--purple':'#6C3483','--red':'#C0392B','--green':'#1A9C5B'};
-      const stroke = acMap[c.ac]||'#2E86AB';
+      const acMap = {'--teal': '#2E86AB', '--orange': '#E67E22', '--purple': '#6C3483', '--red': '#C0392B', '--green': '#1A9C5B'};
+      const stroke = acMap[c.ac] || '#2E86AB';
       const polyline = pts.join(' ');
-      const area = `${pts[0].split(',')[0]},${H} ` + polyline + ` ${pts[pts.length-1].split(',')[0]},${H}`;
+      const area = `${pts[0].split(',')[0]},${H} ` + polyline + ` ${pts[pts.length - 1].split(',')[0]},${H}`;
       spark = `<div class="sparkline-wrap">
         <svg class="sparkline-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
           <polygon points="${area}" class="spark-area" fill="${stroke}"/>
           <polyline points="${polyline}" class="spark-line" stroke="${stroke}"/>
-          ${vals.map((v,i)=>{
-            const x=(i/(vals.length-1))*W, y=H-(v/mx)*H;
+          ${vals.map((v, i) => {
+            const x = (i / (vals.length - 1)) * W, y = H - (v / mx) * H;
             return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" class="spark-dot" fill="${stroke}"/>`;
           }).join('')}
         </svg>
@@ -1550,34 +1444,27 @@ function renderKPIs(){
 
     const div = document.createElement('div');
     div.className = 'kpi-card';
-    div.style.setProperty('--ac',`var(${c.ac})`);
-    div.innerHTML = `${donut}<div class="kpi-icon">${c.icon}</div><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val" style="padding-right:${pct!==null?'60px':'0'}">${c.val}</div><div class="kpi-sub">${c.sub}</div>${badgeTxt?`<span class="badge ${badgeClass}">${badgeTxt}</span>`:''}${spark}`;
+    div.style.setProperty('--ac', `var(${c.ac})`);
+    div.innerHTML = `${donut}<div class="kpi-icon">${c.icon}</div><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val" style="padding-right:${pct !== null ? '60px' : '0'}">${c.val}</div><div class="kpi-sub">${c.sub}</div>${badgeTxt ? `<span class="badge ${badgeClass}">${badgeTxt}</span>` : ''}${spark}`;
     g.appendChild(div);
   });
 }
 
 function renderProgress(){
-  const g=document.getElementById('progGrid');
-  g.innerHTML='';
-  const insts = FILTERED.inst!=='all'
-    ? RAW.config.institutions.filter(i=>i.name===FILTERED.inst)
+  const g = document.getElementById('progGrid');
+  g.innerHTML = '';
+  const insts = FILTERED.inst !== 'all'
+    ? RAW.config.institutions.filter(i => i.name === FILTERED.inst)
     : RAW.config.institutions;
 
-  insts.forEach(inst=>{
-    const s=getInstStats(inst.name, RAW.stats);
-    const pct=Math.min(100,s.pct*100).toFixed(1);
-
-    // Create a map of owner name to total count
-    const ownerTotals = new Map();
-    
-    // First, get all stats for this institution
+  insts.forEach(inst => {
+    const s = getInstStats(inst.name, RAW.stats);
+    const pct = Math.min(100, s.pct * 100).toFixed(1);
     const instStats = RAW.stats.filter(x => x.inst === inst.name);
     
-    // For each stat entry, find the matching member or use the raw owner name
+    const ownerTotals = new Map();
     instStats.forEach(stat => {
       if (!stat.owner) return;
-      
-      // Try to find a matching member in CONFIG
       let matchedMember = null;
       for (let member of RAW.config.members) {
         if (matchMemberName(stat.owner, member)) {
@@ -1585,50 +1472,47 @@ function renderProgress(){
           break;
         }
       }
-      
-      // Use the matched member name if found, otherwise use the raw owner name
       const key = matchedMember ? matchedMember.name : stat.owner;
-      
-      // Sum up the counts
       const currentTotal = ownerTotals.get(key) || 0;
       ownerTotals.set(key, currentTotal + stat.count);
     });
     
-    // Also add members from CONFIG who belong to this institution but have no data
+    // Ensure Delight appears with the correct totals
+    const delightMember = RAW.config.members.find(m => m.short === 'Delight' || m.name.includes('Cotilda'));
+    if (delightMember && !ownerTotals.has(delightMember.name)) {
+      // Check if any stats match Delight
+      const delightStats = instStats.filter(s => matchMemberName(s.owner, delightMember));
+      if (delightStats.length > 0) {
+        const total = delightStats.reduce((sum, s) => sum + s.count, 0);
+        ownerTotals.set(delightMember.name, total);
+      } else {
+        ownerTotals.set(delightMember.name, 0);
+      }
+    }
+    
     RAW.config.members.forEach(member => {
       if (member.inst === inst.name && !ownerTotals.has(member.name)) {
         ownerTotals.set(member.name, 0);
       }
     });
     
-    // Convert to array and sort by count (descending)
     const owners = Array.from(ownerTotals.entries())
       .sort((a, b) => b[1] - a[1]);
     
     const maxCount = owners.length ? Math.max(...owners.map(o => o[1]), 1) : 1;
-
-    // Build owner bars
     const ownerBars = owners.slice(0, 8).map(([name, cnt]) => {
       const pctO = (cnt / maxCount * 100).toFixed(0);
       const mem = RAW.config.members.find(m => m.name === name);
-      
-      // Determine status dot color
       let dotClass = 'dot-active';
       if (mem) {
         if (mem.status === 'OFF') dotClass = 'dot-off';
         else if (mem.status === 'LEAVE') dotClass = 'dot-leave';
       }
-      
-      // Use short name or first name for display
       let displayName = name.split(' ')[0];
-      if (mem && mem.short) {
-        displayName = mem.short;
-      }
-      // Special case for Delight
+      if (mem && mem.short) displayName = mem.short;
       if (displayName === 'Delight' || name.toLowerCase().includes('delight') || name.toLowerCase().includes('cotil')) {
         displayName = 'Delight';
       }
-      
       return `<div class="owner-row">
         <div class="owner-status-dot ${dotClass}"></div>
         <span class="owner-name" title="${name}">${displayName}</span>
@@ -1637,25 +1521,22 @@ function renderProgress(){
       </div>`;
     }).join('');
 
-    const fillColor = parseFloat(pct)>=100?'#1A9C5B':parseFloat(pct)>=75?'#2E86AB':parseFloat(pct)>=40?'#E67E22':'#C0392B';
+    const fillColor = parseFloat(pct) >= 100 ? '#1A9C5B' : parseFloat(pct) >= 75 ? '#2E86AB' : parseFloat(pct) >= 40 ? '#E67E22' : '#C0392B';
 
-    // Daily totals for mini bar chart
-    const dailyMap={};
-    RAW.stats.filter(x=>x.inst===inst.name).forEach(x=>{
-      if(x.date) dailyMap[x.date]=(dailyMap[x.date]||0)+x.count;
-    });
-    const dailyDates=Object.keys(dailyMap).sort();
-    const dailyVals=dailyDates.map(d=>dailyMap[d]);
-    const maxDaily=Math.max(...dailyVals,1);
+    const dailyMap = {};
+    instStats.forEach(x => { if(x.date) dailyMap[x.date] = (dailyMap[x.date] || 0) + x.count; });
+    const dailyDates = Object.keys(dailyMap).sort();
+    const dailyVals = dailyDates.map(d => dailyMap[d]);
+    const maxDaily = Math.max(...dailyVals, 1);
 
     const miniBars = dailyVals.length > 0 ? `
       <div style="margin-top:10px;margin-bottom:4px">
         <div style="font-size:9px;color:var(--dim);font-family:'DM Mono',monospace;margin-bottom:5px;letter-spacing:1px">DAILY CAPTURES</div>
         <div class="mini-bars">
-          ${dailyVals.map((v,i)=>{
-            const h = Math.max(4, (v/maxDaily)*32);
+          ${dailyVals.map((v, i) => {
+            const h = Math.max(4, (v / maxDaily) * 32);
             const lbl = dailyDates[i] ? dailyDates[i].slice(5) : '';
-            return `<div class="mini-bar" style="height:${h}px;background:${fillColor};opacity:${0.5+(v/maxDaily)*0.5}" title="${dailyDates[i]}: ${v} files">
+            return `<div class="mini-bar" style="height:${h}px;background:${fillColor};opacity:${0.5 + (v / maxDaily) * 0.5}" title="${dailyDates[i]}: ${v} files">
               <div class="mini-bar-lbl">${lbl}</div>
             </div>`;
           }).join('')}
@@ -1663,18 +1544,17 @@ function renderProgress(){
         <div style="height:14px"></div>
       </div>` : '';
 
-    // Donut SVG for progress card
-    const r2=18, circ2=2*Math.PI*r2, filled2=Math.min(parseFloat(pct)/100,1)*circ2;
-    const donutProg=`<svg width="44" height="44" viewBox="0 0 44 44" style="transform:rotate(-90deg);flex-shrink:0">
+    const r2 = 18, circ2 = 2 * Math.PI * r2, filled2 = Math.min(parseFloat(pct) / 100, 1) * circ2;
+    const donutProg = `<svg width="44" height="44" viewBox="0 0 44 44" style="transform:rotate(-90deg);flex-shrink:0">
       <circle cx="22" cy="22" r="${r2}" fill="none" stroke="var(--s3)" stroke-width="4"/>
       <circle cx="22" cy="22" r="${r2}" fill="none" stroke="${fillColor}" stroke-width="4"
         stroke-linecap="round"
         stroke-dasharray="${filled2.toFixed(1)} ${circ2.toFixed(1)}"/>
     </svg>`;
 
-    const div=document.createElement('div');
-    div.className='prog-card';
-    div.innerHTML=`
+    const div = document.createElement('div');
+    div.className = 'prog-card';
+    div.innerHTML = `
       <div class="prog-head">
         <div style="flex:1"><div class="prog-name">🏥 ${inst.name}</div>
           <div class="prog-sub">${inst.code} · Target: ${s.target.toLocaleString()}</div></div>
@@ -1694,53 +1574,51 @@ function renderProgress(){
 }
 
 function renderEntries(){
-  const tb=document.getElementById('entryTbody');
-  tb.innerHTML='';
-  const data = [...FILTERED.stats].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
-  document.getElementById('entryCountBadge').textContent=data.length+' entries';
+  const tb = document.getElementById('entryTbody');
+  tb.innerHTML = '';
+  const data = [...FILTERED.stats].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
+  document.getElementById('entryCountBadge').textContent = data.length + ' entries';
   if(!data.length){
-    tb.innerHTML='<tr><td colspan="4" class="no-data">No entries match current filters</td></tr>';
+    tb.innerHTML = '<tr><td colspan="4" class="no-data">No entries match current filters</td></tr>';
     return;
   }
-  data.forEach(e=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${e.owner}</td><td><span class="tag tag-inst">${e.inst}</span></td>
-      <td style="font-family:'DM Mono',monospace;font-size:10px">${e.date}</td>
-      <td style="font-weight:700;color:var(--teal2);font-family:'DM Mono',monospace">${e.count}</td>`;
+  data.forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${e.owner}</td><td><span class="tag tag-inst">${e.inst}</span></td>
+      <td style="font-family:\'DM Mono\',monospace;font-size:10px">${e.date}</td>
+      <td style="font-weight:700;color:var(--teal2);font-family:\'DM Mono\',monospace">${e.count}</td>`;
     tb.appendChild(tr);
   });
 }
 
 function renderDuplicates(){
-  const tb=document.getElementById('dupTbody');
-  tb.innerHTML='';
-  let dups=RAW.duplicates;
-  if(FILTERED.inst!=='all') dups=dups.filter(d=>d.inst===FILTERED.inst);
-  document.getElementById('dupCountBadge').textContent=dups.length+' flagged';
+  const tb = document.getElementById('dupTbody');
+  tb.innerHTML = '';
+  let dups = RAW.duplicates;
+  if(FILTERED.inst !== 'all') dups = dups.filter(d => d.inst === FILTERED.inst);
+  document.getElementById('dupCountBadge').textContent = dups.length + ' flagged';
   if(!dups.length){
-    tb.innerHTML='<tr><td colspan="4" class="no-data">No duplicates found 🎉</td></tr>';
+    tb.innerHTML = '<tr><td colspan="4" class="no-data">No duplicates found 🎉</td></tr>';
     return;
   }
-  dups.forEach(d=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${d.owner1}</td><td>${d.owner2}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${d.empNo}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:10px">${d.date}</td>`;
+  dups.forEach(d => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${d.owner1}</td><td>${d.owner2}</td>
+      <td style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted)">${d.empNo}</td>
+      <td style="font-family:\'DM Mono\',monospace;font-size:10px">${d.date}</td>`;
     tb.appendChild(tr);
   });
 }
 
 function renderTeam(){
-  const tb=document.getElementById('teamTbody');
-  tb.innerHTML='';
+  const tb = document.getElementById('teamTbody');
+  tb.innerHTML = '';
   
-  // Start with CONFIG members
   let membersMap = new Map();
   RAW.config.members.forEach(m => membersMap.set(m.name, {...m}));
   
-  // Add any data owners not in CONFIG
-  const dataOwners = [...new Set(RAW.stats.map(s=>s.owner).filter(Boolean))];
-  dataOwners.forEach(name=>{
+  const dataOwners = [...new Set(RAW.stats.map(s => s.owner).filter(Boolean))];
+  dataOwners.forEach(name => {
     let found = false;
     for(let [key, m] of membersMap.entries()) {
       if(matchMemberName(name, m)) {
@@ -1749,18 +1627,14 @@ function renderTeam(){
       }
     }
     if(!found) {
-      membersMap.set(name, {name, short:name.split(' ')[0], status:'ACTIVE', inst:''});
+      membersMap.set(name, {name, short: name.split(' ')[0], status: 'ACTIVE', inst: ''});
     }
   });
   
   let members = Array.from(membersMap.values());
 
-  if(FILTERED.inst!=='all'){
-    // Include member if: (a) CONFIG says they belong to this inst, OR
-    // (b) they have actual data entries for this institution
-    const membersWithData = new Set(
-      RAW.stats.filter(s=>s.inst===FILTERED.inst).map(s=>s.owner)
-    );
+  if(FILTERED.inst !== 'all'){
+    const membersWithData = new Set(RAW.stats.filter(s => s.inst === FILTERED.inst).map(s => s.owner));
     members = members.filter(m => {
       if(m.inst === FILTERED.inst) return true;
       for(let dataName of membersWithData) {
@@ -1770,49 +1644,45 @@ function renderTeam(){
     });
   }
   
-  if(FILTERED.member!=='all') {
+  if(FILTERED.member !== 'all') {
     members = members.filter(m => matchMemberName(FILTERED.member, m));
   }
 
-  const active=members.filter(m=>m.status==='ACTIVE').length;
-  document.getElementById('teamSummaryBadge').textContent=`${active} active / ${members.length} total`;
+  const active = members.filter(m => m.status === 'ACTIVE').length;
+  document.getElementById('teamSummaryBadge').textContent = `${active} active / ${members.length} total`;
 
-  if(!members.length){ tb.innerHTML='<tr><td colspan="6" class="no-data">No members</td></tr>'; return; }
+  if(!members.length){ tb.innerHTML = '<tr><td colspan="6" class="no-data">No members</td></tr>'; return; }
 
-  members.forEach(m=>{
-    // Sum captures for this member (flexible matching)
+  members.forEach(m => {
     let captured = 0;
-    RAW.stats.forEach(s=>{
+    RAW.stats.forEach(s => {
       if(matchMemberName(s.owner, m)) captured += s.count;
     });
     
-    // Last active date
-    const dates = RAW.stats.filter(s=>matchMemberName(s.owner, m) && s.count>0).map(s=>s.date).sort();
-    const lastDate = dates.length ? dates[dates.length-1] : '—';
+    const dates = RAW.stats.filter(s => matchMemberName(s.owner, m) && s.count > 0).map(s => s.date).sort();
+    const lastDate = dates.length ? dates[dates.length - 1] : '—';
     
-    // Count duplicates
     let dups = 0;
-    RAW.duplicates.forEach(d=>{
+    RAW.duplicates.forEach(d => {
       if(matchMemberName(d.owner1, m) || matchMemberName(d.owner2, m)) dups++;
     });
     
-    const statusMap={ACTIVE:'tag-active',OFF:'tag-off',LEAVE:'tag-leave'};
-    const tagClass=statusMap[m.status]||'tag-off';
+    const statusMap = {ACTIVE: 'tag-active', OFF: 'tag-off', LEAVE: 'tag-leave'};
+    const tagClass = statusMap[m.status] || 'tag-off';
     const instDisplay = m.inst || (() => {
-      // Try to find institution from data
       for(let s of RAW.stats) {
         if(matchMemberName(s.owner, m) && s.inst) return s.inst;
       }
       return '';
     })();
 
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td style="font-weight:600">${m.name}</td>
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="font-weight:600">${m.name}</td>
       <td><span class="tag tag-inst">${instDisplay}</span></td>
       <td><span class="tag ${tagClass}">${m.status}</span></td>
-      <td style="font-weight:700;font-family:'DM Mono',monospace;color:var(--teal2)">${captured.toLocaleString()}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${lastDate}</td>
-      <td style="font-family:'DM Mono',monospace;color:${dups>0?'#E74C3C':'var(--dim)'}">${dups>0?'⚠ '+dups:'—'}</td>`;
+      <td style="font-weight:700;font-family:\'DM Mono\',monospace;color:var(--teal2)">${captured.toLocaleString()}</td>
+      <td style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted)">${lastDate}</td>
+      <td style="font-family:\'DM Mono\',monospace;color:${dups > 0 ? '#E74C3C' : 'var(--dim)'}">${dups > 0 ? '⚠ ' + dups : '—'}</td>`;
     tb.appendChild(tr);
   });
 }
@@ -1822,8 +1692,8 @@ function renderTeam(){
 // ═══════════════════════════════════════════════
 function openAdmin(){
   if(!isAdmin){
-    document.getElementById('adminPassInput').value='';
-    document.getElementById('adminPassErr').textContent='';
+    document.getElementById('adminPassInput').value = '';
+    document.getElementById('adminPassErr').textContent = '';
     openModal('adminGate');
   } else {
     populateAdminSelects();
@@ -1832,9 +1702,9 @@ function openAdmin(){
 }
 
 function checkAdminPass(){
-  const v=document.getElementById('adminPassInput').value.trim();
-  if(v===adminPass()){
-    isAdmin=true;
+  const v = document.getElementById('adminPassInput').value.trim();
+  if(v === adminPass()){
+    isAdmin = true;
     closeModal('adminGate');
     document.getElementById('adminBtn').style.display = 'flex';
     document.getElementById('connectBtn').style.display = 'flex';
@@ -1842,244 +1712,232 @@ function checkAdminPass(){
     populateAdminSelects();
     openModal('adminModal');
   } else {
-    document.getElementById('adminPassErr').textContent='✗ Incorrect admin passcode';
-    setTimeout(()=>document.getElementById('adminPassErr').textContent='',2500);
+    document.getElementById('adminPassErr').textContent = '✗ Incorrect admin passcode';
+    setTimeout(() => document.getElementById('adminPassErr').textContent = '', 2500);
   }
 }
 
 function populateAdminSelects(){
-  const insts=RAW.config.institutions.map(i=>i.name);
-  const members=RAW.config.members.map(m=>m.name);
+  const insts = RAW.config.institutions.map(i => i.name);
+  const members = RAW.config.members.map(m => m.name);
 
-  ['asInst','niCode','dpInst'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el||id==='niCode') return;
-    const cur=el.value;
-    el.innerHTML='<option value="">Select…</option>';
-    insts.forEach(i=>{ const o=document.createElement('option');o.value=i;o.textContent=i;el.appendChild(o); });
-    if(cur) el.value=cur;
+  ['asInst', 'niCode', 'dpInst'].forEach(id => {
+    const el = document.getElementById(id);
+    if(!el || id === 'niCode') return;
+    const cur = el.value;
+    el.innerHTML = '<option value="">Select…</option>';
+    insts.forEach(i => { const o = document.createElement('option'); o.value = i; o.textContent = i; el.appendChild(o); });
+    if(cur) el.value = cur;
   });
-  ['asMember','dpOwner1','dpOwner2'].forEach(id=>{
-    const el=document.getElementById(id);
+  ['asMember', 'dpOwner1', 'dpOwner2'].forEach(id => {
+    const el = document.getElementById(id);
     if(!el) return;
-    const cur=el.value;
-    el.innerHTML='<option value="">Select…</option>';
-    members.forEach(m=>{ const o=document.createElement('option');o.value=m;o.textContent=m;el.appendChild(o); });
-    if(cur) el.value=cur;
+    const cur = el.value;
+    el.innerHTML = '<option value="">Select…</option>';
+    members.forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; el.appendChild(o); });
+    if(cur) el.value = cur;
   });
-  ['nmInst','dpInst'].forEach(id=>{
-    const el=document.getElementById(id);
+  ['nmInst', 'dpInst'].forEach(id => {
+    const el = document.getElementById(id);
     if(!el) return;
-    el.innerHTML='<option value="">Select…</option>';
-    insts.forEach(i=>{ const o=document.createElement('option');o.value=i;o.textContent=i;el.appendChild(o); });
+    el.innerHTML = '<option value="">Select…</option>';
+    insts.forEach(i => { const o = document.createElement('option'); o.value = i; o.textContent = i; el.appendChild(o); });
   });
 
-  // Set today as default date
-  const today=new Date().toISOString().split('T')[0];
-  ['asDate','dpDate'].forEach(id=>{ const el=document.getElementById(id); if(el&&!el.value) el.value=today; });
+  const today = new Date().toISOString().split('T')[0];
+  ['asDate', 'dpDate'].forEach(id => { const el = document.getElementById(id); if(el && !el.value) el.value = today; });
 
-  // Member list with status toggles
-  const ml=document.getElementById('memberList');
+  const ml = document.getElementById('memberList');
   if(ml){
-    ml.innerHTML='';
-    RAW.config.members.forEach((m,idx)=>{
-      const dotColor={ACTIVE:'#2ECC71',OFF:'#E74C3C',LEAVE:'#E67E22'}[m.status]||'#999';
-      const div=document.createElement('div');
-      div.className='member-item';
-      div.innerHTML=`<div class="member-dot" style="background:${dotColor}"></div>
+    ml.innerHTML = '';
+    RAW.config.members.forEach((m, idx) => {
+      const dotColor = {ACTIVE: '#2ECC71', OFF: '#E74C3C', LEAVE: '#E67E22'}[m.status] || '#999';
+      const div = document.createElement('div');
+      div.className = 'member-item';
+      div.innerHTML = `<div class="member-dot" style="background:${dotColor}"></div>
         <span class="member-name">${m.name}</span>
         <span class="member-inst">${m.inst}</span>
         <select class="member-status-sel" onchange="updateMemberStatus(${idx},this.value)">
-          <option ${m.status==='ACTIVE'?'selected':''}>ACTIVE</option>
-          <option ${m.status==='OFF'?'selected':''}>OFF</option>
-          <option ${m.status==='LEAVE'?'selected':''}>LEAVE</option>
-          <option ${m.status==='RESIGNED'?'selected':''}>RESIGNED</option>
+          <option ${m.status === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option>
+          <option ${m.status === 'OFF' ? 'selected' : ''}>OFF</option>
+          <option ${m.status === 'LEAVE' ? 'selected' : ''}>LEAVE</option>
+          <option ${m.status === 'RESIGNED' ? 'selected' : ''}>RESIGNED</option>
         </select>`;
       ml.appendChild(div);
     });
   }
 
-  // Institution list
-  const il=document.getElementById('instList');
+  const il = document.getElementById('instList');
   if(il){
-    il.innerHTML='';
-    RAW.config.institutions.forEach((inst,idx)=>{
-      const div=document.createElement('div');
-      div.className='member-item';
-      div.innerHTML=`<span style="font-size:16px">🏥</span>
+    il.innerHTML = '';
+    RAW.config.institutions.forEach((inst, idx) => {
+      const div = document.createElement('div');
+      div.className = 'member-item';
+      div.innerHTML = `<span style="font-size:16px">🏥</span>
         <span class="member-name">${inst.name}</span>
         <span class="member-inst">${inst.code}</span>
-        <span style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">Target: ${inst.target||'Not set'}</span>`;
+        <span style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace">Target: ${inst.target || 'Not set'}</span>`;
       il.appendChild(div);
     });
   }
 }
 
 function switchTab(id){
-  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.mtab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.mtab').forEach(b => b.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   event.target.classList.add('active');
 }
 
-function updateMemberStatus(idx,status){
-  RAW.config.members[idx].status=status;
+function updateMemberStatus(idx, status){
+  RAW.config.members[idx].status = status;
   render();
-  writeToSheet('member_status',{name:RAW.config.members[idx].name,status});
+  writeToSheet('member_status', {name: RAW.config.members[idx].name, status});
 }
 
 async function submitStat(){
-  const date=document.getElementById('asDate').value;
-  const inst=document.getElementById('asInst').value;
-  const owner=document.getElementById('asMember').value;
-  const count=parseInt(document.getElementById('asCount').value)||0;
-  const duty=document.getElementById('asDuty').value;
-  const notes=document.getElementById('asNotes').value;
+  const date = document.getElementById('asDate').value;
+  const inst = document.getElementById('asInst').value;
+  const owner = document.getElementById('asMember').value;
+  const count = parseInt(document.getElementById('asCount').value) || 0;
+  const duty = document.getElementById('asDuty').value;
+  const notes = document.getElementById('asNotes').value;
 
-  if(!date||!inst||!owner){ showAdminMsg('err','Please fill in all required fields'); return; }
+  if(!date || !inst || !owner){ showAdminMsg('err', 'Please fill in all required fields'); return; }
 
-  const row={date,inst,owner,count,duty,notes};
+  const row = {date, inst, owner, count, duty, notes};
   RAW.stats.push(row);
-  FILTERED.stats=RAW.stats; // will be re-filtered
+  FILTERED.stats = RAW.stats;
   populateFilters();
   applyFilters();
 
-  const ok = await writeToSheet('add_stat',row);
+  const ok = await writeToSheet('add_stat', row);
   if(ok){
-    showAdminMsg('ok',`✅ Entry added: ${owner} — ${count} files on ${date}`);
-    document.getElementById('asCount').value='';
-    document.getElementById('asNotes').value='';
+    showAdminMsg('ok', `✅ Entry added: ${owner} — ${count} files on ${date}`);
+    document.getElementById('asCount').value = '';
+    document.getElementById('asNotes').value = '';
   } else {
-    showAdminMsg('ok',`✅ Entry added locally. ${appsScriptUrl()?'Sheet write pending.':'Connect Apps Script to sync to sheet.'}`);
+    showAdminMsg('ok', `✅ Entry added locally. ${appsScriptUrl() ? 'Sheet write pending.' : 'Connect Apps Script to sync to sheet.'}`);
   }
 }
 
 function addMember(){
-  const full=document.getElementById('nmFull').value.trim();
-  const short=document.getElementById('nmShort').value.trim()||full.split(' ')[0];
-  const inst=document.getElementById('nmInst').value;
-  const phone=document.getElementById('nmPhone').value.trim();
-  if(!full){ showAdminMsg('err','Full name is required'); return; }
-  RAW.config.members.push({name:full,short,status:'ACTIVE',inst,phone});
+  const full = document.getElementById('nmFull').value.trim();
+  const short = document.getElementById('nmShort').value.trim() || full.split(' ')[0];
+  const inst = document.getElementById('nmInst').value;
+  const phone = document.getElementById('nmPhone').value.trim();
+  if(!full){ showAdminMsg('err', 'Full name is required'); return; }
+  RAW.config.members.push({name: full, short, status: 'ACTIVE', inst, phone});
   populateAdminSelects();
   populateFilters();
   applyFilters();
-  writeToSheet('add_member',{full,short,inst,phone,status:'ACTIVE'});
-  showAdminMsg('ok',`✅ Member added: ${full}`);
-  document.getElementById('nmFull').value='';
-  document.getElementById('nmShort').value='';
-  document.getElementById('nmPhone').value='';
+  writeToSheet('add_member', {full, short, inst, phone, status: 'ACTIVE'});
+  showAdminMsg('ok', `✅ Member added: ${full}`);
+  document.getElementById('nmFull').value = '';
+  document.getElementById('nmShort').value = '';
+  document.getElementById('nmPhone').value = '';
 }
 
 function addInstitution(){
-  const name=document.getElementById('niName').value.trim();
-  const code=document.getElementById('niCode').value.trim().toUpperCase();
-  const target=parseInt(document.getElementById('niTarget').value)||0;
-  const notes=document.getElementById('niNotes').value.trim();
-  if(!name||!code){ showAdminMsg('err','Name and code are required'); return; }
-  RAW.config.institutions.push({name,code,target,notes});
+  const name = document.getElementById('niName').value.trim();
+  const code = document.getElementById('niCode').value.trim().toUpperCase();
+  const target = parseInt(document.getElementById('niTarget').value) || 0;
+  const notes = document.getElementById('niNotes').value.trim();
+  if(!name || !code){ showAdminMsg('err', 'Name and code are required'); return; }
+  RAW.config.institutions.push({name, code, target, notes});
   populateAdminSelects();
   populateFilters();
   applyFilters();
-  writeToSheet('add_institution',{name,code,target,notes});
-  showAdminMsg('ok',`✅ Institution added: ${name} (${code})`);
-  ['niName','niCode','niTarget','niNotes'].forEach(id=>document.getElementById(id).value='');
+  writeToSheet('add_institution', {name, code, target, notes});
+  showAdminMsg('ok', `✅ Institution added: ${name} (${code})`);
+  ['niName', 'niCode', 'niTarget', 'niNotes'].forEach(id => document.getElementById(id).value = '');
 }
 
 function addDuplicate(){
-  const date=document.getElementById('dpDate').value;
-  const empNo=document.getElementById('dpEmp').value.trim();
-  const owner1=document.getElementById('dpOwner1').value;
-  const owner2=document.getElementById('dpOwner2').value;
-  const inst=document.getElementById('dpInst').value;
-  if(!empNo||!owner1||!owner2){ showAdminMsg('err','Employee number and both owners are required'); return; }
-  RAW.duplicates.push({date,empNo,owner1,owner2,inst});
+  const date = document.getElementById('dpDate').value;
+  const empNo = document.getElementById('dpEmp').value.trim();
+  const owner1 = document.getElementById('dpOwner1').value;
+  const owner2 = document.getElementById('dpOwner2').value;
+  const inst = document.getElementById('dpInst').value;
+  if(!empNo || !owner1 || !owner2){ showAdminMsg('err', 'Employee number and both owners are required'); return; }
+  RAW.duplicates.push({date, empNo, owner1, owner2, inst});
   renderDuplicates();
-  writeToSheet('add_duplicate',{date,empNo,owner1,owner2,inst});
-  showAdminMsg('ok',`✅ Duplicate logged: ${owner1} / ${owner2}`);
-  document.getElementById('dpEmp').value='';
+  writeToSheet('add_duplicate', {date, empNo, owner1, owner2, inst});
+  showAdminMsg('ok', `✅ Duplicate logged: ${owner1} / ${owner2}`);
+  document.getElementById('dpEmp').value = '';
 }
 
-function showAdminMsg(type,msg){
-  const e=document.getElementById('adminErr');
-  const o=document.getElementById('adminOk');
+function showAdminMsg(type, msg){
+  const e = document.getElementById('adminErr');
+  const o = document.getElementById('adminOk');
   e.classList.remove('show'); o.classList.remove('show');
-  if(type==='err'){e.textContent=msg;e.classList.add('show');}
-  else{o.textContent=msg;o.classList.add('show');}
-  setTimeout(()=>{e.classList.remove('show');o.classList.remove('show');},4000);
+  if(type === 'err'){ e.textContent = msg; e.classList.add('show'); }
+  else { o.textContent = msg; o.classList.add('show'); }
+  setTimeout(() => { e.classList.remove('show'); o.classList.remove('show'); }, 4000);
 }
 
-// ═══════════════════════════════════════════════
-//  WRITE TO GOOGLE SHEET (via Apps Script)
-// ═══════════════════════════════════════════════
 async function writeToSheet(action, data){
   const url = appsScriptUrl();
   if(!url) return false;
   try{
     const resp = await fetch(url, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({action, data, adminKey: adminPass()}),
     });
     return resp.ok;
-  }catch(e){ return false; }
+  } catch(e){ return false; }
 }
 
-// ═══════════════════════════════════════════════
-//  CONNECT MODAL
-// ═══════════════════════════════════════════════
 function openConnect(){
-  document.getElementById('urlStats').value  = CFG.urlStats||'';
-  document.getElementById('urlConfig').value = CFG.urlConfig||'';
-  document.getElementById('urlDups').value   = CFG.urlDups||'';
-  document.getElementById('urlScript').value = CFG.appsScriptUrl||'';
-  document.getElementById('cfgTeamPass').value  = CFG.teamPass||'ARUA2026';
-  document.getElementById('cfgAdminPass').value = CFG.adminPass||'';
+  document.getElementById('urlStats').value = CFG.urlStats || '';
+  document.getElementById('urlConfig').value = CFG.urlConfig || '';
+  document.getElementById('urlDups').value = CFG.urlDups || '';
+  document.getElementById('urlScript').value = CFG.appsScriptUrl || '';
+  document.getElementById('cfgTeamPass').value = CFG.teamPass || 'ARUA2026';
+  document.getElementById('cfgAdminPass').value = CFG.adminPass || '';
   document.getElementById('connErr').classList.remove('show');
   document.getElementById('connOk').classList.remove('show');
   openModal('connectModal');
 }
 
 function saveConnect(){
-  const stats  = document.getElementById('urlStats').value.trim();
+  const stats = document.getElementById('urlStats').value.trim();
   const config = document.getElementById('urlConfig').value.trim();
-  const dups   = document.getElementById('urlDups').value.trim();
+  const dups = document.getElementById('urlDups').value.trim();
   const script = document.getElementById('urlScript').value.trim();
-  const tPass  = document.getElementById('cfgTeamPass').value.trim();
-  const aPass  = document.getElementById('cfgAdminPass').value.trim();
+  const tPass = document.getElementById('cfgTeamPass').value.trim();
+  const aPass = document.getElementById('cfgAdminPass').value.trim();
 
-  CFG.urlStats      = stats;
-  CFG.urlConfig     = config;
-  CFG.urlDups       = dups;
+  CFG.urlStats = stats;
+  CFG.urlConfig = config;
+  CFG.urlDups = dups;
   CFG.appsScriptUrl = script;
-  if(tPass) CFG.teamPass  = tPass;
+  if(tPass) CFG.teamPass = tPass;
   if(aPass) CFG.adminPass = aPass;
 
-  try{ localStorage.setItem('dc_cfg', JSON.stringify(CFG)); }catch(e){}
+  try{ localStorage.setItem('dc_cfg', JSON.stringify(CFG)); } catch(e){}
 
-  document.getElementById('connOk').textContent='✅ Saved! Fetching data…';
+  document.getElementById('connOk').textContent = '✅ Saved! Fetching data…';
   document.getElementById('connOk').classList.add('show');
 
   if(stats){
     document.getElementById('cfgBar').classList.add('connected');
-    document.getElementById('cfgUrl').textContent=stats;
-    setTimeout(()=>{ closeModal('connectModal'); fetchAll(); },600);
+    document.getElementById('cfgUrl').textContent = stats;
+    setTimeout(() => { closeModal('connectModal'); fetchAll(); }, 600);
   } else {
-    setTimeout(()=>closeModal('connectModal'),600);
+    setTimeout(() => closeModal('connectModal'), 600);
   }
 }
 
-// ═══════════════════════════════════════════════
-//  SYNC STATUS
-// ═══════════════════════════════════════════════
 function setSyncStatus(s){
-  const dot=document.getElementById('syncDot');
-  const lbl=document.getElementById('syncLbl');
-  dot.className='sync-dot';
-  if(s==='live'){dot.classList.add('live');lbl.textContent='Live sync';}
-  else if(s==='loading'){dot.classList.add('loading');lbl.textContent='Syncing…';}
-  else if(s==='err'){dot.classList.add('err');lbl.textContent='Sync error';}
-  else lbl.textContent='Not connected';
+  const dot = document.getElementById('syncDot');
+  const lbl = document.getElementById('syncLbl');
+  dot.className = 'sync-dot';
+  if(s === 'live'){ dot.classList.add('live'); lbl.textContent = 'Live sync'; }
+  else if(s === 'loading'){ dot.classList.add('loading'); lbl.textContent = 'Syncing…'; }
+  else if(s === 'err'){ dot.classList.add('err'); lbl.textContent = 'Sync error'; }
+  else lbl.textContent = 'Not connected';
 }
 
 async function refreshData(){
@@ -2089,17 +1947,14 @@ async function refreshData(){
 
 function startAutoRefresh(){
   stopAutoRefresh();
-  autoTimer=setInterval(()=>{ if(CFG.urlStats) fetchAll(); },2*60*1000);
+  autoTimer = setInterval(() => { if(CFG.urlStats) fetchAll(); }, 2 * 60 * 1000);
 }
-function stopAutoRefresh(){ if(autoTimer){clearInterval(autoTimer);autoTimer=null;} }
+function stopAutoRefresh(){ if(autoTimer){ clearInterval(autoTimer); autoTimer = null; } }
 
-// ═══════════════════════════════════════════════
-//  MODAL HELPERS
-// ═══════════════════════════════════════════════
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.overlay').forEach(el=>{
-  el.addEventListener('click',e=>{ if(e.target===el) el.classList.remove('open'); });
+document.querySelectorAll('.overlay').forEach(el => {
+  el.addEventListener('click', e => { if(e.target === el) el.classList.remove('open'); });
 });
 </script>
 </body>
