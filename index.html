@@ -235,7 +235,7 @@ code{background:var(--s3);padding:1px 5px;border-radius:3px;font-size:10px;font-
       <button class="btn btn-ghost" onclick="refreshData()">↺</button>
       <button class="btn btn-primary" id="adminBtn" onclick="openAdmin()" style="display:none">⚙ Admin</button>
       <button class="btn btn-ghost" id="connectBtn" onclick="openConnect()" style="display:none">🔗 Connect</button>
-      <button class="btn btn-red" onclick="lockApp()" style="font-size:10px">🔒 Lock</button>
+      <button class="btn btn-red" onclick="lockApp()" style="font-size:10px">⏻ Logout</button>
     </div>
   </header>
 
@@ -964,45 +964,56 @@ function renderKPIs(){
   const g = document.getElementById('kpiGrid');
   g.innerHTML='';
 
-  const data = FILTERED.stats;
-  const allInsts = currentMode==='institution'&&FILTERED.inst!=='all'
-    ? [FILTERED.inst]
-    : [...new Set(RAW.config.institutions.map(i=>i.name))];
+  const isFiltered   = FILTERED.inst!=='all' || FILTERED.member!=='all' || FILTERED.date!=='all';
+  const filteredData = FILTERED.stats;
+  const allData      = RAW.stats;
 
-  // Grand totals
-  const totalTarget = RAW.config.institutions.reduce((a,i)=>a+i.target,0);
-  const totalCaptured = RAW.stats.reduce((a,s)=>a+s.count,0);
-  const totalBalance = Math.max(0,totalTarget-totalCaptured);
-  const totalPct = totalTarget>0?totalCaptured/totalTarget:0;
-  const totalDups = RAW.duplicates.length;
-  const activeMembers = RAW.config.members.filter(m=>m.status==='ACTIVE').length;
+  // When a filter is active, scope the KPIs to the filtered data
+  const scopedData    = isFiltered ? filteredData : allData;
 
-  const cards=[
-    {icon:'📦',lbl:'Total Captured',val:totalCaptured.toLocaleString(),sub:`Target: ${totalTarget.toLocaleString()}`,ac:'--teal',pct:totalPct},
-    {icon:'📋',lbl:'Total Balance',val:totalBalance.toLocaleString(),sub:'Files remaining',ac:'--orange'},
-    {icon:'📈',lbl:'Overall Progress',val:(totalPct*100).toFixed(1)+'%',sub:'Across all institutions',ac:'--purple'},
-    {icon:'⚠️',lbl:'Duplicates Flagged',val:totalDups,sub:'Need resolution',ac:'--red'},
-    {icon:'👥',lbl:'Active Members',val:activeMembers,sub:`of ${RAW.config.members.length} total`,ac:'--green'},
+  // Institutions in scope
+  const scopedInsts = FILTERED.inst!=='all'
+    ? RAW.config.institutions.filter(i=>i.name===FILTERED.inst)
+    : RAW.config.institutions;
+
+  // Totals scoped to current filter
+  const scopedTarget   = scopedInsts.reduce((a,i)=>a+i.target, 0);
+  const scopedCaptured = scopedData.reduce((a,s)=>a+s.count, 0);
+  const scopedBalance  = Math.max(0, scopedTarget - scopedCaptured);
+  const scopedPct      = scopedTarget>0 ? scopedCaptured/scopedTarget : 0;
+
+  // Duplicates scoped to institution filter
+  const scopedDups = FILTERED.inst!=='all'
+    ? RAW.duplicates.filter(d=>d.inst===FILTERED.inst)
+    : RAW.duplicates;
+
+  // Members scoped to institution filter
+  const scopedMembers = FILTERED.inst!=='all'
+    ? RAW.config.members.filter(m=>m.inst===FILTERED.inst)
+    : RAW.config.members;
+  const activeMembers = scopedMembers.filter(m=>m.status==='ACTIVE').length;
+
+  // Filter label for sub text
+  const filterLabel = FILTERED.inst!=='all' ? FILTERED.inst
+    : FILTERED.member!=='all' ? FILTERED.member
+    : 'All Institutions';
+
+  const cards = [
+    {icon:'📦', lbl:'Total Captured',    val:scopedCaptured.toLocaleString(), sub:`Target: ${scopedTarget.toLocaleString()} · ${filterLabel}`, ac:'--teal',   pct:scopedPct},
+    {icon:'📋', lbl:'Total Balance',     val:scopedBalance.toLocaleString(),  sub:`Files remaining · ${filterLabel}`,                          ac:'--orange'},
+    {icon:'📈', lbl:'Overall Progress',  val:(scopedPct*100).toFixed(1)+'%', sub:`${filterLabel}`,                                             ac:'--purple', pct:scopedPct},
+    {icon:'⚠️', lbl:'Duplicates Flagged',val:scopedDups.length,              sub:'Need resolution',                                            ac:'--red'},
+    {icon:'👥', lbl:'Active Members',    val:activeMembers,                  sub:`of ${scopedMembers.length} total`,                           ac:'--green'},
   ];
 
-  // Per-institution in institution mode
-  if(currentMode==='institution'){
-    const insts = FILTERED.inst==='all' ? RAW.config.institutions : RAW.config.institutions.filter(i=>i.name===FILTERED.inst);
-    insts.forEach(inst=>{
-      const s = getInstStats(inst.name, RAW.stats);
-      cards.push({icon:'🏥',lbl:inst.name,val:s.captured.toLocaleString(),
-        sub:`Target: ${s.target.toLocaleString()} · Bal: ${s.balance}`,ac:'--teal',pct:s.pct,code:inst.code});
-    });
-  }
-
   cards.forEach(c=>{
-    const pct = c.pct!==undefined?c.pct:null;
+    const pct = c.pct!==undefined ? c.pct : null;
     const badgeClass = pct===null?'b-blue':pct>=1?'b-green':pct>=.75?'b-blue':pct>=.4?'b-orange':'b-red';
-    const badgeTxt = pct===null?'':pct>=1?'✅ Done':pct>=.75?`🔵 ${(pct*100).toFixed(0)}%`:`⚠ ${(pct*100).toFixed(0)}%`;
-    const div=document.createElement('div');
-    div.className='kpi-card';
+    const badgeTxt   = pct===null?'':pct>=1?'✅ Done':pct>=.75?`🔵 ${(pct*100).toFixed(0)}%`:`⚠ ${(pct*100).toFixed(0)}%`;
+    const div = document.createElement('div');
+    div.className = 'kpi-card';
     div.style.setProperty('--ac',`var(${c.ac})`);
-    div.innerHTML=`<div class="kpi-icon">${c.icon}</div><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div>${badgeTxt?`<span class="badge ${badgeClass}">${badgeTxt}</span>`:''}`;
+    div.innerHTML = `<div class="kpi-icon">${c.icon}</div><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div>${badgeTxt?`<span class="badge ${badgeClass}">${badgeTxt}</span>`:''}`;
     g.appendChild(div);
   });
 }
