@@ -340,6 +340,11 @@ code{background:var(--s3);padding:1px 5px;border-radius:3px;font-size:10px;font-
         <label class="flbl">DUPLICATES Sheet CSV URL (optional)</label>
         <input class="finp" id="urlDups" placeholder="https://docs.google.com/spreadsheets/d/.../pub?gid=...&output=csv" />
       </div>
+      <div class="fg">
+        <label class="flbl">⚡ Apps Script Web App URL (for writing data)</label>
+        <input class="finp" id="urlScript" placeholder="https://script.google.com/macros/s/.../exec" />
+        <div class="fhint">The URL you copied after deploying your Apps Script. This allows the Admin panel to write new entries directly into your Google Sheet.</div>
+      </div>
       <div class="frow">
         <div class="fg" style="margin-bottom:0">
           <label class="flbl">Team Passcode</label>
@@ -1235,6 +1240,7 @@ function openConnect(){
   document.getElementById('urlStats').value  = CFG.urlStats||'';
   document.getElementById('urlConfig').value = CFG.urlConfig||'';
   document.getElementById('urlDups').value   = CFG.urlDups||'';
+  document.getElementById('urlScript').value = CFG.appsScriptUrl||'';
   document.getElementById('cfgTeamPass').value  = CFG.teamPass||'ARUA2026';
   document.getElementById('cfgAdminPass').value = CFG.adminPass||'';
   document.getElementById('connErr').classList.remove('show');
@@ -1246,12 +1252,14 @@ function saveConnect(){
   const stats  = document.getElementById('urlStats').value.trim();
   const config = document.getElementById('urlConfig').value.trim();
   const dups   = document.getElementById('urlDups').value.trim();
+  const script = document.getElementById('urlScript').value.trim();
   const tPass  = document.getElementById('cfgTeamPass').value.trim();
   const aPass  = document.getElementById('cfgAdminPass').value.trim();
 
-  CFG.urlStats   = stats;
-  CFG.urlConfig  = config;
-  CFG.urlDups    = dups;
+  CFG.urlStats      = stats;
+  CFG.urlConfig     = config;
+  CFG.urlDups       = dups;
+  CFG.appsScriptUrl = script;
   if(tPass) CFG.teamPass  = tPass;
   if(aPass) CFG.adminPass = aPass;
 
