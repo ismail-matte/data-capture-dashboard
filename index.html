@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Capture Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0D2137;
+    --blue: #1A3A5C;
+    --teal: #2E86AB;
+    --teal-light: #4EAECB;
+    --gold: #F0A500;
+    --green: #1A9C5B;
+    --red: #C0392B;
+    --orange: #E67E22;
+    --bg: #0A1628;
+    --surface: #0F1E33;
+    --surface2: #162540;
+    --surface3: #1C2E4A;
+    --border: #1E3550;
+    --text: #E8F4F8;
+    --text-muted: #7A9BB8;
+    --text-dim: #3D6080;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(46,134,171,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(46,134,171,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; }
+
+  /* ===== TOP BAR ===== */
+  .topbar {
+    background: linear-gradient(135deg, var(--navy) 0%, #0A1E35 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-mark {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--teal), var(--blue));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    box-shadow: 0 0 20px rgba(46,134,171,0.4);
+  }
+
+  .app-title { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+  .app-subtitle { font-size: 11px; color: var(--text-muted); font-family: 'DM Mono', monospace; margin-top: 1px; }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sync-status {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11px; color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 20px;
+  }
+  .sync-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-dim);
+    transition: all 0.3s;
+  }
+  .sync-dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+  .sync-dot.loading { background: var(--gold); box-shadow: 0 0 8px var(--gold); animation: pulse 0.5s infinite; }
+  .sync-dot.error { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer; border: none;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--teal), #1a6a8a);
+    color: white;
+    box-shadow: 0 2px 12px rgba(46,134,171,0.3);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 18px rgba(46,134,171,0.5); }
+  .btn-ghost {
+    background: var(--surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--teal); color: var(--text); }
+
+  .last-updated {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+    text-align: right;
+  }
+
+  /* ===== MAIN CONTENT ===== */
+  .main { padding: 24px 28px; max-width: 1400px; margin: 0 auto; }
+
+  /* ===== SECTION TITLE ===== */
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ===== KPI GRID ===== */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr) repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent-color, var(--teal));
+    opacity: 0.8;
+  }
+  .kpi-card:hover { border-color: var(--teal); transform: translateY(-2px); }
+
+  .kpi-card.rrh { --accent-color: var(--blue); }
+  .kpi-card.city { --accent-color: var(--teal); }
+  .kpi-card.green-card { --accent-color: var(--green); }
+  .kpi-card.orange-card { --accent-color: var(--orange); }
+  .kpi-card.dup-card { --accent-color: var(--red); }
+
+  .kpi-icon { font-size: 20px; margin-bottom: 8px; }
+  .kpi-label { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; font-family: 'DM Mono', monospace; }
+  .kpi-value {
+    font-size: 36px; font-weight: 700; line-height: 1;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    transition: all 0.5s;
+  }
+  .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  .kpi-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600;
+    padding: 3px 8px; border-radius: 20px;
+    margin-top: 8px;
+  }
+  .badge-green { background: rgba(26,156,91,0.15); color: #2ECC71; border: 1px solid rgba(46,204,113,0.3); }
+  .badge-orange { background: rgba(230,126,34,0.15); color: #E67E22; border: 1px solid rgba(230,126,34,0.3); }
+  .badge-red { background: rgba(192,57,43,0.15); color: #E74C3C; border: 1px solid rgba(231,76,60,0.3); }
+  .badge-blue { background: rgba(46,134,171,0.15); color: var(--teal-light); border: 1px solid rgba(46,134,171,0.3); }
+
+  /* ===== PROGRESS BARS ===== */
+  .progress-section { margin-bottom: 24px; }
+  .progress-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  .progress-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+  }
+
+  .progress-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .progress-title { font-size: 13px; font-weight: 700; color: var(--text); }
+  .progress-subtitle { font-size: 10px; color: var(--text-muted); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .progress-pct { font-size: 28px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .progress-pct-label { font-size: 10px; color: var(--text-muted); text-align: right; font-family: 'DM Mono', monospace; }
+
+  .progress-bar-track {
+    background: var(--surface3);
+    height: 10px;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 1s cubic-bezier(.4,0,.2,1);
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-bar-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+    animation: shimmer 2s infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .fill-rrh { background: linear-gradient(90deg, #1A3A5C, var(--teal)); }
+  .fill-city { background: linear-gradient(90deg, var(--teal), var(--teal-light)); }
+
+  .progress-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+
+  /* Per-owner mini bars */
+  .owner-bars { margin-top: 14px; }
+  .owner-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+  .owner-name { font-size: 11px; color: var(--text-muted); width: 100px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .owner-track { flex: 1; background: var(--surface3); height: 6px; border-radius: 6px; overflow: hidden; }
+  .owner-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--teal), var(--teal-light)); transition: width 0.8s; }
+  .owner-count { font-size: 11px; color: var(--text); font-weight: 600; font-family: 'DM Mono', monospace; width: 28px; text-align: right; flex-shrink: 0; }
+
+  /* ===== BOTTOM ROW ===== */
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+
+  .table-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .table-card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .table-card-title { font-size: 13px; font-weight: 700; }
+  .table-card-badge { font-size: 10px; font-family: 'DM Mono', monospace; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    padding: 10px 16px;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-muted); font-family: 'DM Mono', monospace;
+    text-align: left;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 16px;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(30,53,80,0.5);
+    color: var(--text);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(46,134,171,0.04); }
+
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 600;
+    font-family: 'DM Mono', monospace;
+  }
+  .tag-rrh { background: rgba(26,58,92,0.5); color: var(--teal-light); border: 1px solid rgba(46,134,171,0.3); }
+  .tag-dup { background: rgba(192,57,43,0.15); color: #E74C3C; border: 1px solid rgba(231,76,60,0.2); }
+
+  /* ===== CONFIG MODAL ===== */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    z-index: 999;
+    display: none; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 32px;
+    width: 560px;
+    max-width: 95vw;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+    animation: modalIn 0.3s cubic-bezier(.4,0,.2,1);
+  }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } }
+
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .modal-subtitle { font-size: 12px; color: var(--text-muted); margin-bottom: 24px; }
+
+  .form-group { margin-bottom: 18px; }
+  .form-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; font-family: 'DM Mono', monospace; margin-bottom: 7px; display: block; }
+  .form-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { border-color: var(--teal); }
+  .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+  .step-list { counter-reset: steps; }
+  .step-item {
+    counter-increment: steps;
+    display: flex; gap: 12px; align-items: flex-start;
+    font-size: 12px; color: var(--text-muted); margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .step-item::before {
+    content: counter(steps);
+    background: var(--teal);
+    color: white;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    flex-shrink: 0; margin-top: 1px;
+  }
+
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  .alert {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 11px;
+    margin-bottom: 14px;
+    display: none;
+  }
+  .alert.show { display: block; }
+  .alert-error { background: rgba(192,57,43,0.15); border: 1px solid rgba(231,76,60,0.3); color: #E74C3C; }
+  .alert-success { background: rgba(26,156,91,0.15); border: 1px solid rgba(46,204,113,0.3); color: #2ECC71; }
+
+  /* ===== INLINE CONFIG BAR ===== */
+  .config-bar {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .config-bar .connected-url {
+    flex: 1;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .config-bar.has-url .connected-url { color: var(--teal-light); }
+  .config-bar-icon { font-size: 14px; flex-shrink: 0; }
+
+  /* Chart */
+  .chart-container { padding: 16px 20px 20px; }
+  canvas { width: 100% !important; }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 900px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .progress-grid, .bottom-row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .main { padding: 16px; }
+    .kpi-row { grid-template-columns: 1fr 1fr; }
+    .kpi-value { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo-mark">📊</div>
+      <div>
+        <div class="app-title">Data Capture Tracker</div>
+        <div class="app-subtitle">ARUA RRH · ARUA CITY</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="sync-status">
+        <div class="sync-dot" id="syncDot"></div>
+        <span id="syncLabel">Not connected</span>
+      </div>
+      <button class="btn btn-ghost" onclick="refreshData()">↺ Refresh</button>
+      <button class="btn btn-primary" onclick="openConfig()">⚙ Configure</button>
+      <div>
+        <div class="last-updated" id="lastUpdated">—</div>
+        <div class="last-updated" style="color:var(--text-dim)">Last synced</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- Config bar -->
+    <div class="config-bar" id="configBar">
+      <span class="config-bar-icon">🔗</span>
+      <span class="connected-url" id="configBarUrl">No Google Sheet connected. Click ⚙ Configure to connect your data.</span>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:10px;" onclick="openConfig()">Connect Sheet</button>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="section-label">Key Metrics</div>
+    <div class="kpi-row">
+      <div class="kpi-card rrh">
+        <div class="kpi-icon">🏥</div>
+        <div class="kpi-label">Arua RRH Captured</div>
+        <div class="kpi-value" id="rrhCaptured">238</div>
+        <div class="kpi-sub">Target: <span id="rrhTarget">249</span></div>
+        <span class="kpi-badge badge-orange" id="rrhBadge">⚠ 95.6% done</span>
+      </div>
+      <div class="kpi-card city">
+        <div class="kpi-icon">🌆</div>
+        <div class="kpi-label">Arua City Captured</div>
+        <div class="kpi-value" id="cityCaptured">0</div>
+        <div class="kpi-sub">Target: <span id="cityTarget">2253</span></div>
+        <span class="kpi-badge badge-red" id="cityBadge">⚠ 0% done</span>
+      </div>
+      <div class="kpi-card green-card">
+        <div class="kpi-icon">📋</div>
+        <div class="kpi-label">RRH Balance</div>
+        <div class="kpi-value" id="rrhBalance">11</div>
+        <div class="kpi-sub">Files remaining</div>
+      </div>
+      <div class="kpi-card orange-card">
+        <div class="kpi-icon">📋</div>
+        <div class="kpi-label">City Balance</div>
+        <div class="kpi-value" id="cityBalance">2253</div>
+        <div class="kpi-sub">Files remaining</div>
+      </div>
+      <div class="kpi-card dup-card">
+        <div class="kpi-icon">⚠️</div>
+        <div class="kpi-label">Duplicate Captures</div>
+        <div class="kpi-value" id="dupCount">7</div>
+        <div class="kpi-sub">Files captured twice</div>
+        <span class="kpi-badge badge-red">Action needed</span>
+      </div>
+    </div>
+
+    <!-- PROGRESS BARS -->
+    <div class="section-label">Facility Progress</div>
+    <div class="progress-grid progress-section">
+
+      <!-- RRH -->
+      <div class="progress-card">
+        <div class="progress-header">
+          <div>
+            <div class="progress-title">🏥 Arua RRH</div>
+            <div class="progress-subtitle" id="rrhDateRange">18 Feb 2026</div>
+          </div>
+          <div style="text-align:right">
+            <div class="progress-pct" id="rrhPct">95.6%</div>
+            <div class="progress-pct-label">complete</div>
+          </div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill fill-rrh" id="rrhBar" style="width: 95.6%"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="rrhMetaLeft">238 / 249 captured</span>
+          <span id="rrhMetaRight">11 remaining</span>
+        </div>
+        <div class="owner-bars" id="rrhOwnerBars"></div>
+      </div>
+
+      <!-- CITY -->
+      <div class="progress-card">
+        <div class="progress-header">
+          <div>
+            <div class="progress-title">🌆 Arua City</div>
+            <div class="progress-subtitle" id="cityDateRange">19 Feb 2026</div>
+          </div>
+          <div style="text-align:right">
+            <div class="progress-pct" id="cityPct">0.0%</div>
+            <div class="progress-pct-label">complete</div>
+          </div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill fill-city" id="cityBar" style="width: 0%"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="cityMetaLeft">0 / 2253 captured</span>
+          <span id="cityMetaRight">2253 remaining</span>
+        </div>
+        <div class="owner-bars" id="cityOwnerBars"></div>
+      </div>
+    </div>
+
+    <!-- BOTTOM ROW -->
+    <div class="section-label">Activity & Duplicates</div>
+    <div class="bottom-row">
+
+      <!-- Recent entries table -->
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="progress-title">📅 Recent Daily Entries</div>
+          <span class="table-card-badge badge-blue kpi-badge" id="entryCount">8 entries</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Owner</th>
+              <th>Date</th>
+              <th>Count</th>
+              <th>Facility</th>
+            </tr>
+          </thead>
+          <tbody id="entriesTable">
+            <!-- populated by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Duplicates table -->
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="progress-title">⚠️ Duplicate File Captures</div>
+          <span class="kpi-badge badge-red" id="dupBadge">7 duplicates</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Owner 1</th>
+              <th>Owner 2</th>
+              <th>Emp. Number</th>
+              <th>Facility</th>
+            </tr>
+          </thead>
+          <tbody id="dupTable">
+            <!-- populated by JS -->
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===== CONFIG MODAL ===== -->
+<div class="modal-overlay" id="configModal">
+  <div class="modal">
+    <div class="modal-title">⚙ Configure Data Source</div>
+    <div class="modal-subtitle">Connect this dashboard to your Google Sheet for live sync</div>
+
+    <div class="alert alert-error" id="configError"></div>
+    <div class="alert alert-success" id="configSuccess"></div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:10px;font-family:'DM Mono',monospace;letter-spacing:1px;">HOW TO CONNECT YOUR GOOGLE SHEET</div>
+      <div class="step-list">
+        <div class="step-item">Open your Google Sheet and go to <strong style="color:var(--text)">File → Share → Publish to web</strong></div>
+        <div class="step-item">Select <strong style="color:var(--text)">Entire Document</strong> → <strong style="color:var(--text)">CSV format</strong>, click <strong style="color:var(--text)">Publish</strong></div>
+        <div class="step-item">Copy the published URL and paste it below</div>
+        <div class="step-item">Click <strong style="color:var(--text)">Connect & Sync</strong> — the dashboard refreshes every <strong style="color:var(--text)">2 minutes</strong> automatically</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="form-group">
+      <label class="form-label">Google Sheet Published CSV URL</label>
+      <input class="form-input" id="sheetUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" />
+      <div class="form-hint">The URL should end with <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:10px;">?output=csv</code>. This works without any login required.</div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">RRH Target (total files)</label>
+        <input class="form-input" id="cfgRrhTarget" type="number" placeholder="249" />
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">City Target (total files)</label>
+        <input class="form-input" id="cfgCityTarget" type="number" placeholder="2253" />
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:18px;">
+      <label class="form-label">Sheet name containing daily data</label>
+      <input class="form-input" id="cfgSheetName" type="text" placeholder="COUNT" />
+      <div class="form-hint">Name of the sheet/tab in your Google Sheet (e.g. COUNT, Sheet1)</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Data Owner column name</label>
+      <input class="form-input" id="cfgOwnerCol" type="text" placeholder="Data Owner" />
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeConfig()">Cancel</button>
+      <button class="btn btn-ghost" onclick="clearConfig()">🗑 Clear</button>
+      <button class="btn btn-primary" onclick="saveConfig()">⚡ Connect & Sync</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =========================================================
+//  STATIC DATA (fallback / demo)
+// =========================================================
+const STATIC_DATA = {
+  rrh: {
+    target: 249,
+    captured: 238,
+    owners: [
+      { name: "Kalinda Fredrick", count: 44 },
+      { name: "Nicholas Mulaya",  count: 38 },
+      { name: "Robinah Kasande",  count: 37 },
+      { name: "Salim Kigundu",    count: 37 },
+      { name: "Ismail Matte",     count: 35 },
+      { name: "Anthony Nyombi",   count: 25 },
+      { name: "Dilght Cotilda",   count: 22 },
+    ]
+  },
+  city: {
+    target: 2253,
+    captured: 0,
+    owners: []
+  },
+  entries: [
+    { owner: "Kalinda Fredrick", date: "18-Feb-2026", count: 44, facility: "ARUA RRH" },
+    { owner: "Nicholas Mulaya",  date: "18-Feb-2026", count: 38, facility: "ARUA RRH" },
+    { owner: "Robinah Kasande",  date: "18-Feb-2026", count: 37, facility: "ARUA RRH" },
+    { owner: "Salim Kigundu",    date: "18-Feb-2026", count: 37, facility: "ARUA RRH" },
+    { owner: "Ismail Matte",     date: "18-Feb-2026", count: 35, facility: "ARUA RRH" },
+    { owner: "Anthony Nyombi",   date: "18-Feb-2026", count: 25, facility: "ARUA RRH" },
+    { owner: "Dilght Cotilda",   date: "18-Feb-2026", count: 22, facility: "ARUA RRH" },
+  ],
+  duplicates: [
+    { owner1: "Robinah",  owner2: "Anthony",  empNo: "...77339", facility: "ARUA RRH" },
+    { owner1: "Robinah",  owner2: "Salim",    empNo: "...26818", facility: "ARUA RRH" },
+    { owner1: "Nicholas", owner2: "Delight",  empNo: "...27042", facility: "ARUA RRH" },
+    { owner1: "Robinah",  owner2: "Fredrick", empNo: "...27684", facility: "ARUA RRH" },
+    { owner1: "Robinah",  owner2: "Salim",    empNo: "...56510", facility: "ARUA RRH" },
+    { owner1: "Robinah",  owner2: "Delight",  empNo: "...40530", facility: "ARUA RRH" },
+    { owner1: "Fredrick", owner2: "Delight",  empNo: "...78371", facility: "ARUA RRH" },
+  ]
+};
+
+// =========================================================
+//  CONFIG PERSISTENCE
+// =========================================================
+let config = {};
+try { config = JSON.parse(localStorage.getItem('dc_config') || '{}'); } catch(e) {}
+
+let liveData = null; // will be set when sheet is connected
+let autoRefreshTimer = null;
+
+function openConfig() {
+  document.getElementById('sheetUrl').value = config.sheetUrl || '';
+  document.getElementById('cfgRrhTarget').value = config.rrhTarget || '249';
+  document.getElementById('cfgCityTarget').value = config.cityTarget || '2253';
+  document.getElementById('cfgSheetName').value = config.sheetName || 'COUNT';
+  document.getElementById('cfgOwnerCol').value = config.ownerCol || 'Data Owner';
+  document.getElementById('configError').classList.remove('show');
+  document.getElementById('configSuccess').classList.remove('show');
+  document.getElementById('configModal').classList.add('open');
+}
+function closeConfig() { document.getElementById('configModal').classList.remove('open'); }
+function clearConfig() {
+  config = {};
+  localStorage.removeItem('dc_config');
+  liveData = null;
+  stopAutoRefresh();
+  setSyncStatus('idle');
+  document.getElementById('configBar').classList.remove('has-url');
+  document.getElementById('configBarUrl').textContent = 'No Google Sheet connected. Click ⚙ Configure to connect your data.';
+  closeConfig();
+  renderDashboard(STATIC_DATA);
+}
+
+function saveConfig() {
+  const url = document.getElementById('sheetUrl').value.trim();
+  const err = document.getElementById('configError');
+  const suc = document.getElementById('configSuccess');
+  err.classList.remove('show'); suc.classList.remove('show');
+
+  if (url && !url.includes('docs.google.com') && !url.includes('output=csv')) {
+    err.textContent = 'URL should be a Google Sheets published CSV link (docs.google.com/.../pub?output=csv)';
+    err.classList.add('show');
+    return;
+  }
+
+  config = {
+    sheetUrl:    url,
+    rrhTarget:   parseInt(document.getElementById('cfgRrhTarget').value) || 249,
+    cityTarget:  parseInt(document.getElementById('cfgCityTarget').value) || 2253,
+    sheetName:   document.getElementById('cfgSheetName').value.trim() || 'COUNT',
+    ownerCol:    document.getElementById('cfgOwnerCol').value.trim() || 'Data Owner',
+  };
+  try { localStorage.setItem('dc_config', JSON.stringify(config)); } catch(e) {}
+
+  if (url) {
+    suc.textContent = '✅ Config saved! Fetching data from sheet…';
+    suc.classList.add('show');
+    document.getElementById('configBar').classList.add('has-url');
+    document.getElementById('configBarUrl').textContent = url;
+    setTimeout(() => { closeConfig(); fetchSheetData(); }, 800);
+  } else {
+    suc.textContent = '✅ Config saved. Using demo data (no URL provided).';
+    suc.classList.add('show');
+    // Update targets from config
+    const d = JSON.parse(JSON.stringify(STATIC_DATA));
+    d.rrh.target = config.rrhTarget;
+    d.city.target = config.cityTarget;
+    setTimeout(() => { closeConfig(); renderDashboard(d); }, 600);
+  }
+}
+
+// =========================================================
+//  GOOGLE SHEETS FETCH + PARSE
+// =========================================================
+async function fetchSheetData() {
+  if (!config.sheetUrl) return;
+  setSyncStatus('loading');
+
+  try {
+    // Use a CORS proxy approach: if they use publish-to-web CSV, it typically works.
+    // We try directly first, then via a proxy.
+    let csvText = null;
+    const urls = [
+      config.sheetUrl,
+      `https://corsproxy.io/?${encodeURIComponent(config.sheetUrl)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(config.sheetUrl)}`
+    ];
+
+    for (const url of urls) {
+      try {
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (resp.ok) { csvText = await resp.text(); break; }
+      } catch(e) { /* try next */ }
+    }
+
+    if (!csvText) throw new Error('Could not fetch sheet. Make sure it is published to web as CSV.');
+
+    const parsed = parseCSV(csvText);
+    const data = transformSheetData(parsed);
+    liveData = data;
+    renderDashboard(data);
+    setSyncStatus('connected');
+    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+    startAutoRefresh();
+  } catch (e) {
+    setSyncStatus('error');
+    // Show error in config bar
+    document.getElementById('configBarUrl').textContent = '⚠ Sync failed: ' + e.message + ' — showing last data';
+    // Still render with static or last data
+    renderDashboard(liveData || STATIC_DATA);
+  }
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  return lines.map(line => {
+    // Simple CSV parse (handles quoted fields)
+    const row = [];
+    let field = ''; let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQuote = !inQuote; }
+      else if (ch === ',' && !inQuote) { row.push(field.trim()); field = ''; }
+      else { field += ch; }
+    }
+    row.push(field.trim());
+    return row;
+  });
+}
+
+function transformSheetData(rows) {
+  // Expected sheet format from DAILY LOG:
+  // Row 1: Arua RRH (target), ..., Arua City (target)
+  // Row 2: headers
+  // Row 3: dates
+  // Rows 4+: owner, date, count, ...
+  // We'll be flexible: look for owner names and numbers
+
+  const data = {
+    rrh: { target: config.rrhTarget || 249, captured: 0, owners: [] },
+    city: { target: config.cityTarget || 2253, captured: 0, owners: [] },
+    entries: [],
+    duplicates: STATIC_DATA.duplicates // duplicates need separate sheet
+  };
+
+  if (!rows || rows.length < 3) return data;
+
+  // Try to find target from first row
+  for (const cell of rows[0]) {
+    const m = cell.match(/(\d+)/);
+    if (m && parseInt(m[1]) > 10) {
+      if (!data.rrh._found) { data.rrh.target = parseInt(m[1]); data.rrh._found = true; }
+      else if (!data.city._found) { data.city.target = parseInt(m[1]); data.city._found = true; }
+    }
+  }
+
+  // Find header row
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    if (rows[i].some(c => c.toLowerCase().includes('owner') || c.toLowerCase().includes('date'))) {
+      headerRow = i; break;
+    }
+  }
+
+  const ownerTotals = {};
+
+  // Find data rows (owner + count patterns)
+  for (let i = headerRow + 2; i < rows.length; i++) {
+    const row = rows[i];
+    const ownerCell = row[0] ? row[0].trim() : '';
+    if (!ownerCell || ownerCell.toUpperCase() === 'TOTAL' || ownerCell.toUpperCase() === 'BAL') continue;
+
+    // Look for numeric values in the row
+    for (let j = 1; j < row.length; j++) {
+      const val = parseFloat(row[j]);
+      if (!isNaN(val) && val > 0) {
+        if (!ownerTotals[ownerCell]) ownerTotals[ownerCell] = 0;
+        ownerTotals[ownerCell] += val;
+
+        // Try to get date from row 3
+        const dateRow = rows[headerRow + 1] || [];
+        const dateStr = dateRow[j] || '';
+
+        data.entries.push({
+          owner: ownerCell,
+          date: dateStr || `Day ${j}`,
+          count: val,
+          facility: 'ARUA RRH'
+        });
+      }
+    }
+  }
+
+  // Build owners list
+  const sortedOwners = Object.entries(ownerTotals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }));
+
+  data.rrh.owners = sortedOwners;
+  data.rrh.captured = sortedOwners.reduce((s, o) => s + o.count, 0);
+  data.rrh.balance = data.rrh.target - data.rrh.captured;
+
+  // Sort entries by date desc
+  data.entries.sort((a, b) => a.date > b.date ? -1 : 1);
+
+  return data;
+}
+
+// =========================================================
+//  RENDER DASHBOARD
+// =========================================================
+function renderDashboard(d) {
+  const rrh = d.rrh;
+  const city = d.city;
+
+  // KPI values
+  document.getElementById('rrhCaptured').textContent = rrh.captured.toLocaleString();
+  document.getElementById('rrhTarget').textContent   = rrh.target.toLocaleString();
+  document.getElementById('cityCaptured').textContent= city.captured.toLocaleString();
+  document.getElementById('cityTarget').textContent  = city.target.toLocaleString();
+  document.getElementById('rrhBalance').textContent  = Math.max(0, rrh.target - rrh.captured).toLocaleString();
+  document.getElementById('cityBalance').textContent = Math.max(0, city.target - city.captured).toLocaleString();
+  document.getElementById('dupCount').textContent    = d.duplicates.length;
+  document.getElementById('dupBadge').textContent    = d.duplicates.length + ' duplicates';
+  document.getElementById('entryCount').textContent  = d.entries.length + ' entries';
+
+  // Badges
+  const rrhPct = rrh.target > 0 ? (rrh.captured / rrh.target * 100) : 0;
+  const cityPct = city.target > 0 ? (city.captured / city.target * 100) : 0;
+
+  document.getElementById('rrhPct').textContent  = rrhPct.toFixed(1) + '%';
+  document.getElementById('cityPct').textContent = cityPct.toFixed(1) + '%';
+  document.getElementById('rrhBar').style.width  = Math.min(100, rrhPct) + '%';
+  document.getElementById('cityBar').style.width = Math.min(100, cityPct) + '%';
+  document.getElementById('rrhMetaLeft').textContent  = `${rrh.captured} / ${rrh.target} captured`;
+  document.getElementById('rrhMetaRight').textContent = `${Math.max(0, rrh.target - rrh.captured)} remaining`;
+  document.getElementById('cityMetaLeft').textContent  = `${city.captured} / ${city.target} captured`;
+  document.getElementById('cityMetaRight').textContent = `${Math.max(0, city.target - city.captured)} remaining`;
+
+  setBadge('rrhBadge',  rrhPct,  rrh.captured,  rrh.target);
+  setBadge('cityBadge', cityPct, city.captured, city.target);
+
+  // Owner bars
+  renderOwnerBars('rrhOwnerBars',  rrh.owners,  rrh.target);
+  renderOwnerBars('cityOwnerBars', city.owners, city.target);
+
+  // Entries table
+  const tbody = document.getElementById('entriesTable');
+  tbody.innerHTML = '';
+  const entries = (d.entries || []).slice(0, 20);
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:20px;">No entries yet</td></tr>';
+  } else {
+    entries.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${e.owner}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:11px;">${e.date}</td>
+        <td style="font-weight:700;color:var(--teal-light);font-family:'DM Mono',monospace;">${e.count}</td>
+        <td><span class="tag tag-rrh">${e.facility}</span></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Duplicates table
+  const dupTbody = document.getElementById('dupTable');
+  dupTbody.innerHTML = '';
+  d.duplicates.forEach(dup => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${dup.owner1}</td>
+      <td>${dup.owner2}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);">${dup.empNo}</td>
+      <td><span class="tag tag-dup">⚠ DUP</span></td>`;
+    dupTbody.appendChild(tr);
+  });
+}
+
+function setBadge(id, pct, captured, target) {
+  const el = document.getElementById(id);
+  el.className = 'kpi-badge';
+  if (pct >= 100) {
+    el.classList.add('badge-green');
+    el.textContent = '✅ Complete!';
+  } else if (pct >= 75) {
+    el.classList.add('badge-blue');
+    el.textContent = `🔵 ${pct.toFixed(1)}% done`;
+  } else if (pct >= 40) {
+    el.classList.add('badge-orange');
+    el.textContent = `⚠ ${pct.toFixed(1)}% done`;
+  } else {
+    el.classList.add('badge-red');
+    el.textContent = `⚠ ${pct.toFixed(1)}% done`;
+  }
+}
+
+function renderOwnerBars(containerId, owners, target) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  if (!owners || owners.length === 0) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--text-dim);margin-top:8px;">No data yet</div>';
+    return;
+  }
+  const maxCount = Math.max(...owners.map(o => o.count), 1);
+  owners.forEach(o => {
+    const pct = (o.count / maxCount * 100).toFixed(0);
+    const div = document.createElement('div');
+    div.className = 'owner-row';
+    div.innerHTML = `
+      <span class="owner-name" title="${o.name}">${o.name.split(' ')[0]}</span>
+      <div class="owner-track"><div class="owner-fill" style="width:${pct}%"></div></div>
+      <span class="owner-count">${o.count}</span>`;
+    el.appendChild(div);
+  });
+}
+
+// =========================================================
+//  SYNC STATUS
+// =========================================================
+function setSyncStatus(state) {
+  const dot = document.getElementById('syncDot');
+  const label = document.getElementById('syncLabel');
+  dot.className = 'sync-dot';
+  if (state === 'connected') {
+    dot.classList.add('active');
+    label.textContent = 'Live sync';
+  } else if (state === 'loading') {
+    dot.classList.add('loading');
+    label.textContent = 'Syncing…';
+  } else if (state === 'error') {
+    dot.classList.add('error');
+    label.textContent = 'Sync error';
+  } else {
+    label.textContent = 'Not connected';
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  autoRefreshTimer = setInterval(() => {
+    if (config.sheetUrl) fetchSheetData();
+  }, 2 * 60 * 1000); // every 2 minutes
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+}
+
+async function refreshData() {
+  if (config.sheetUrl) {
+    await fetchSheetData();
+  } else {
+    renderDashboard(STATIC_DATA);
+    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+  }
+}
+
+// =========================================================
+//  INIT
+// =========================================================
+window.addEventListener('load', () => {
+  renderDashboard(STATIC_DATA);
+  document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+
+  if (config.sheetUrl) {
+    document.getElementById('configBar').classList.add('has-url');
+    document.getElementById('configBarUrl').textContent = config.sheetUrl;
+    fetchSheetData();
+  }
+});
+
+// Close modal on overlay click
+document.getElementById('configModal').addEventListener('click', function(e) {
+  if (e.target === this) closeConfig();
+});
+</script>
+</body>
+</html>
