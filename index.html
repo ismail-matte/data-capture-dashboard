@@ -748,7 +748,6 @@ function cleanDate(raw){
 
 function parseStats(rows){
   if(!rows.length) return;
-  console.log('CSV rows received:',rows.length);
 
   // Print first 5 rows to see exact structure
   rows.slice(0,5).forEach((r,i)=>console.log('Row'+i+':',JSON.stringify(r)));
@@ -776,8 +775,7 @@ function parseStats(rows){
   if(hi >= 0){
     // Use header-based parsing
     const hdr = rows[hi].map(c=>String(c).toLowerCase().trim());
-    console.log('Header row',hi,':',JSON.stringify(hdr));
-
+  
     // Find columns by position — print all headers so we can see them
     let iDate=-1, iInst=-1, iOwner=-1, iCount=-1, iDuty=-1, iNotes=-1;
     hdr.forEach((h,i)=>{
@@ -788,8 +786,7 @@ function parseStats(rows){
       if(h.includes('duty') && iDuty<0)    iDuty=i;
       if(h.includes('note') && iNotes<0)   iNotes=i;
     });
-    console.log('Columns — date:',iDate,'inst:',iInst,'owner:',iOwner,'count:',iCount);
-
+  
     for(let i=hi+1;i<rows.length;i++){
       const r=rows[i];
       const inst  = iInst>=0  ? String(r[iInst] ||'').trim() : '';
@@ -811,8 +808,7 @@ function parseStats(rows){
   // FALLBACK: if header parsing failed or found nothing,
   // scan every row and detect data rows by institution name
   if(parsed.length === 0){
-    console.warn('Header parse failed — trying positional fallback');
-    for(let i=0;i<rows.length;i++){
+      for(let i=0;i<rows.length;i++){
       const r=rows[i];
       if(r.length < 4) continue;
       // Try each cell as potential institution
@@ -836,13 +832,10 @@ function parseStats(rows){
         }
       }
     }
-    console.log('Fallback found',parsed.length,'rows');
-  }
+    }
 
-  console.log('FINAL parsed count:',parsed.length);
   if(parsed.length>0){
-    console.log('Sample:',parsed.slice(0,3).map(p=>p.date+'|'+p.inst+'|'+p.owner+'|'+p.count).join(' // '));
-    RAW.stats=parsed;
+      RAW.stats=parsed;
   }
 }
 
