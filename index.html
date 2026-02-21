@@ -1234,10 +1234,10 @@ function renderProgress(){
     const s=getInstStats(inst.name, RAW.stats);
     const pct=Math.min(100,s.pct*100).toFixed(1);
 
-    // Per-owner within this institution
+    // Per-owner within this institution — use actual data entries
     const ownerMap={};
     RAW.stats.filter(x=>x.inst===inst.name).forEach(x=>{
-      ownerMap[x.owner]=(ownerMap[x.owner]||0)+x.count;
+      if(x.owner) ownerMap[x.owner]=(ownerMap[x.owner]||0)+x.count;
     });
     const owners=Object.entries(ownerMap).sort((a,b)=>b[1]-a[1]);
     const maxCount=owners.length?Math.max(...owners.map(o=>o[1])):1;
@@ -1351,8 +1351,27 @@ function renderTeam(){
   const tb=document.getElementById('teamTbody');
   tb.innerHTML='';
   let members=RAW.config.members;
-  if(FILTERED.inst!=='all') members=members.filter(m=>m.inst===FILTERED.inst);
+
+  if(FILTERED.inst!=='all'){
+    // Include member if: (a) CONFIG says they belong to this inst, OR
+    // (b) they have actual data entries for this institution
+    const membersWithData = new Set(
+      RAW.stats.filter(s=>s.inst===FILTERED.inst).map(s=>s.owner)
+    );
+    members = members.filter(m=>
+      m.inst===FILTERED.inst || membersWithData.has(m.name)
+    );
+  }
   if(FILTERED.member!=='all') members=members.filter(m=>m.name===FILTERED.member);
+
+  // Also include any data owners not in CONFIG members list
+  const knownNames = new Set(members.map(m=>m.name));
+  const dataOwners = [...new Set(FILTERED.stats.map(s=>s.owner).filter(Boolean))];
+  dataOwners.forEach(name=>{
+    if(!knownNames.has(name)){
+      members = [...members, {name, short:name.split(' ')[0], status:'ACTIVE', inst:''}];
+    }
+  });
 
   const active=members.filter(m=>m.status==='ACTIVE').length;
   document.getElementById('teamSummaryBadge').textContent=`${active} active / ${members.length} total`;
