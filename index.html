@@ -590,7 +590,7 @@ try { CFG = JSON.parse(localStorage.getItem('dc_cfg') || '{}'); } catch(e){}
 const DEFAULTS = {
   urlStats:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vRT318YUbN2yDLBAvnGmTO90CzrkHfPSHj_RAuFh1s-pN2YuDjOtYtbuttElr6pK4I4_IHlXWGuOFol/pub?gid=686195105&single=true&output=csv',
   urlConfig:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRT318YUbN2yDLBAvnGmTO90CzrkHfPSHj_RAuFh1s-pN2YuDjOtYtbuttElr6pK4I4_IHlXWGuOFol/pub?gid=1076946811&single=true&output=csv',
-  urlDups:       '',
+  urlDups:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vRT318YUbN2yDLBAvnGmTO90CzrkHfPSHj_RAuFh1s-pN2YuDjOtYtbuttElr6pK4I4_IHlXWGuOFol/pub?gid=213279555&single=true&output=csv',
   appsScriptUrl: 'https://script.google.com/macros/s/AKfycbwt6dAbu1QzTlL_l5Qb5S7D6q51kg0UWKFqoLLIZo_PzH63zCYhy-Ku7r8H0Q0q0JI/exec',
   teamPass:      'ARUA2026',
   adminPass:     'ADMIN@2026',
@@ -613,6 +613,45 @@ function adminPass(){ return CFG.adminPass || 'ADMIN@2026'; }
 
 // ── Apps Script Web App URL ──
 function appsScriptUrl(){ return CFG.appsScriptUrl || ''; }
+
+// ═══════════════════════════════════════════════
+//  HELPER: Match member name flexibly
+// ═══════════════════════════════════════════════
+function matchMemberName(dataName, member) {
+  if (!dataName || !member) return false;
+  const d = dataName.toLowerCase().trim();
+  const full = (member.name || '').toLowerCase().trim();
+  const short = (member.short || '').toLowerCase().trim();
+  
+  // Exact match
+  if (d === full) return true;
+  if (short && d === short) return true;
+  
+  // Contains match (for variations like "Cotil Delight" vs "Dilght Cotilda")
+  if (full && (full.includes(d) || d.includes(full))) return true;
+  if (short && (d.includes(short) || short.includes(d))) return true;
+  
+  // Split into words and check if any word matches
+  const dWords = d.split(/\s+/);
+  const fullWords = full ? full.split(/\s+/) : [];
+  const shortWords = short ? short.split(/\s+/) : [];
+  
+  for (let dw of dWords) {
+    if (dw.length < 3) continue; // Skip very short words
+    for (let fw of fullWords) {
+      if (fw.includes(dw) || dw.includes(fw)) return true;
+    }
+    for (let sw of shortWords) {
+      if (sw.includes(dw) || dw.includes(sw)) return true;
+    }
+  }
+  
+  // Special case for Cotil/Delight
+  if (d.includes('cotil') && (full.includes('cotilda') || short === 'delight')) return true;
+  if (d.includes('delight') && (full.includes('cotilda') || short === 'delight')) return true;
+  
+  return false;
+}
 
 // ═══════════════════════════════════════════════
 //  LOCK / UNLOCK
@@ -668,27 +707,41 @@ function initApp(){
     {name:'Anthony Nyombi',  short:'Anthony',  status:'ACTIVE', inst:'Arua RRH'},
     {name:'Salim Kigundu',   short:'Salim',    status:'ACTIVE', inst:'Arua RRH'},
     {name:'Dilght Cotilda',  short:'Delight',  status:'ACTIVE', inst:'Arua RRH'},
-    {name:'Ismail Matte',    short:'Ismail',   status:'ACTIVE', inst:'Arua RRH'},
+    {name:'Ismail Matte',    short:'Ismail',   status:'ACTIVE', inst:'Arua RRH', phone:'0782475028'},
+    {name:'Dan Ndyamureeba', short:'Dan',      status:'OFF',    inst:'Arua RRH'},
   ];
   RAW.stats = [
     {date:'2026-02-17',inst:'Arua RRH',owner:'Nicholas Mulaya', count:0,  duty:'YES',notes:''},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Nicholas Mulaya', count:38, duty:'YES',notes:''},
+    {date:'2026-02-18',inst:'Arua RRH',owner:'Nicholas Mulaya', count:38, duty:'YES',notes:'Day Start'},
     {date:'2026-02-18',inst:'Arua RRH',owner:'Robinah Kasande', count:37, duty:'YES',notes:''},
     {date:'2026-02-18',inst:'Arua RRH',owner:'Kalinda Fredrick',count:44, duty:'YES',notes:''},
     {date:'2026-02-18',inst:'Arua RRH',owner:'Anthony Nyombi',  count:25, duty:'YES',notes:''},
     {date:'2026-02-18',inst:'Arua RRH',owner:'Salim Kigundu',   count:37, duty:'YES',notes:''},
-    {date:'2026-02-18',inst:'Arua RRH',owner:'Dilght Cotilda',  count:22, duty:'YES',notes:''},
+    {date:'2026-02-18',inst:'Arua RRH',owner:'Cotil Delight',   count:22, duty:'YES',notes:''},
     {date:'2026-02-18',inst:'Arua RRH',owner:'Ismail Matte',    count:35, duty:'YES',notes:''},
-    {date:'2026-02-19',inst:'Arua City',owner:'—',              count:0,  duty:'YES',notes:'First day'},
+    {date:'2026-02-19',inst:'Arua City',owner:'Nicholas Mulaya', count:19, duty:'YES',notes:'Day Start'},
+    {date:'2026-02-19',inst:'Arua City',owner:'Robinah Kasande', count:15, duty:'YES',notes:''},
+    {date:'2026-02-19',inst:'Arua City',owner:'Kalinda Fredrick',count:51, duty:'YES',notes:''},
+    {date:'2026-02-19',inst:'Arua City',owner:'Anthony Nyombi',  count:19, duty:'YES',notes:''},
+    {date:'2026-02-19',inst:'Arua City',owner:'Salim Kigundu',   count:21, duty:'YES',notes:''},
+    {date:'2026-02-19',inst:'Arua City',owner:'Cotil Delight',   count:13, duty:'YES',notes:''},
+    {date:'2026-02-19',inst:'Arua City',owner:'Ismail Matte',    count:9,  duty:'YES',notes:''},
+    {date:'2026-02-20',inst:'Arua City',owner:'Nicholas Mulaya', count:43, duty:'YES',notes:'Day Start'},
+    {date:'2026-02-20',inst:'Arua City',owner:'Robinah Kasande', count:48, duty:'YES',notes:''},
+    {date:'2026-02-20',inst:'Arua City',owner:'Kalinda Fredrick',count:69, duty:'YES',notes:''},
+    {date:'2026-02-20',inst:'Arua City',owner:'Anthony Nyombi',  count:56, duty:'YES',notes:''},
+    {date:'2026-02-20',inst:'Arua City',owner:'Salim Kigundu',   count:50, duty:'YES',notes:''},
+    {date:'2026-02-20',inst:'Arua City',owner:'Cotil Delight',   count:18, duty:'YES',notes:''},
+    {date:'2026-02-20',inst:'Arua City',owner:'Ismail Matte',    count:30, duty:'YES',notes:''},
   ];
   RAW.duplicates = [
-    {date:'2026-02-18',empNo:'...77339',owner1:'Robinah Kasande', owner2:'Anthony Nyombi',  inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'...26818',owner1:'Robinah Kasande', owner2:'Salim Kigundu',   inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'...27042',owner1:'Nicholas Mulaya', owner2:'Dilght Cotilda',  inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'...27684',owner1:'Robinah Kasande', owner2:'Kalinda Fredrick',inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'...56510',owner1:'Robinah Kasande', owner2:'Salim Kigundu',   inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'...40530',owner1:'Robinah Kasande', owner2:'Dilght Cotilda',  inst:'Arua RRH'},
-    {date:'2026-02-18',empNo:'...78371',owner1:'Kalinda Fredrick',owner2:'Dilght Cotilda',  inst:'Arua RRH'},
+    {date:'2026-02-18',empNo:'000000000077339',owner1:'Robinah Kasande', owner2:'Anthony Nyombi',  inst:'Arua RRH'},
+    {date:'2026-02-18',empNo:'000000000726818',owner1:'Robinah Kasande', owner2:'Salim Kigundu',   inst:'Arua RRH'},
+    {date:'2026-02-18',empNo:'000000000727042',owner1:'Nicholas Mulaya', owner2:'Dilght Cotilda',  inst:'Arua RRH'},
+    {date:'2026-02-18',empNo:'000000000727684',owner1:'Robinah Kasande', owner2:'Kalinda Fredrick',inst:'Arua RRH'},
+    {date:'2026-02-18',empNo:'000000000756510',owner1:'Robinah Kasande', owner2:'Salim Kigundu',   inst:'Arua RRH'},
+    {date:'2026-02-18',empNo:'000000001040530',owner1:'Robinah Kasande', owner2:'Dilght Cotilda',  inst:'Arua RRH'},
+    {date:'2026-02-18',empNo:'000000001078371',owner1:'Kalinda Fredrick',owner2:'Dilght Cotilda',  inst:'Arua RRH'},
   ];
 
   populateFilters();
@@ -784,22 +837,12 @@ function cleanDate(raw){
 function parseStats(rows){
   if(!rows.length) return;
 
-  // Print first 5 rows to see exact structure
-  rows.slice(0,5).forEach((r,i)=>console.log('Row'+i+':',JSON.stringify(r)));
-
-  // Strategy: scan every row looking for actual data rows
-  // A data row has: a recognisable institution name AND a person name AND a number
-  const INSTITUTIONS = [
-    'arua rrh','arua city','arua dlg','yumbe rrh',
-    'rrh','city','dlg','yumbe'
-  ];
-
   // First try to find a proper header row
   let hi = -1;
   for(let i=0;i<Math.min(rows.length,8);i++){
     const cells = rows[i].map(c=>String(c).toLowerCase().trim());
     const hasInst  = cells.some(c=>c==='institution'||c==='inst');
-    const hasOwner = cells.some(c=>c.includes('owner'));
+    const hasOwner = cells.some(c=>c.includes('owner')||c.includes('data owner'));
     const hasCount = cells.some(c=>c.includes('file')||c.includes('capture')||c.includes('count'));
     if(hasInst && hasOwner){ hi=i; break; }
     if(hasOwner && hasCount){ hi=i; break; }
@@ -811,7 +854,7 @@ function parseStats(rows){
     // Use header-based parsing
     const hdr = rows[hi].map(c=>String(c).toLowerCase().trim());
   
-    // Find columns by position — print all headers so we can see them
+    // Find columns by position
     let iDate=-1, iInst=-1, iOwner=-1, iCount=-1, iDuty=-1, iNotes=-1;
     hdr.forEach((h,i)=>{
       if(h.includes('date') && iDate<0)    iDate=i;
@@ -824,12 +867,14 @@ function parseStats(rows){
   
     for(let i=hi+1;i<rows.length;i++){
       const r=rows[i];
+      if(r.length < 3) continue;
       const inst  = iInst>=0  ? String(r[iInst] ||'').trim() : '';
       const owner = iOwner>=0 ? String(r[iOwner]||'').trim() : '';
       const dateV = iDate>=0  ? String(r[iDate] ||'').trim() : '';
       const cntV  = iCount>=0 ? String(r[iCount]||'')        : '0';
       if(!inst||!owner) continue;
       if(inst.toLowerCase().includes('institution')) continue;
+      if(owner.toLowerCase().includes('data owner')) continue;
       const cnt = parseFloat(cntV.replace(/,/g,''));
       if(isNaN(cnt)) continue;
       parsed.push({
@@ -840,73 +885,84 @@ function parseStats(rows){
     }
   }
 
-  // FALLBACK: if header parsing failed or found nothing,
-  // scan every row and detect data rows by institution name
-  if(parsed.length === 0){
-      for(let i=0;i<rows.length;i++){
-      const r=rows[i];
-      if(r.length < 4) continue;
-      // Try each cell as potential institution
-      for(let c=0;c<Math.min(r.length,5);c++){
-        const val = String(r[c]||'').toLowerCase().trim();
-        if(INSTITUTIONS.some(inst=>val===inst||val.includes(inst))){
-          // Found institution — now find number in this row
-          let num = -1, numCol = -1;
-          for(let j=c+1;j<r.length;j++){
-            const n = parseFloat(String(r[j]||'').replace(/,/g,''));
-            if(!isNaN(n) && n>=0){ num=n; numCol=j; break; }
-          }
-          if(numCol<0) continue;
-          // owner is likely the cell before institution or after
-          const owner = String(r[c>0?c-1:c+1]||'').trim();
-          const date  = cleanDate(String(r[1]||'').trim());
-          if(owner && owner.length>2){
-            parsed.push({date, inst:String(r[c]||'').trim(), owner, count:num, duty:'YES', notes:''});
-          }
-          break;
-        }
-      }
-    }
-    }
-
   if(parsed.length>0){
       RAW.stats=parsed;
   }
 }
 
 function parseConfig(rows){
-  // Look for institution rows (rows with a number target)
   const insts=[], members=[];
-  let memberSection=false;
-  for(const r of rows){
-    if(r[0]==='Institution Name'||r[0]==='Full Name') continue;
-    if(r[0]&&r[2]&&!isNaN(r[2])){
-      insts.push({name:r[0],code:r[1]||'',target:parseInt(r[2])||0,notes:r[3]||''});
+  
+  // Find the institution section
+  let inInstSection = false;
+  let inMemberSection = false;
+  
+  for(let i=0;i<rows.length;i++){
+    const r = rows[i];
+    if(!r.length) continue;
+    const cell0 = String(r[0] || '').toLowerCase();
+    
+    // Detect sections
+    if(cell0.includes('institution') || cell0.includes('vote')) {
+      inInstSection = true;
+      inMemberSection = false;
+      continue;
     }
-    if(r[0]&&r[2]&&isNaN(r[2])&&['ACTIVE','OFF','LEAVE','RESIGNED'].includes(r[2].toUpperCase())){
-      members.push({name:r[0],short:r[1]||r[0].split(' ')[0],status:r[2].toUpperCase(),inst:r[3]||''});
+    if(cell0.includes('team member') || cell0.includes('full name')) {
+      inMemberSection = true;
+      inInstSection = false;
+      continue;
+    }
+    
+    // Parse institutions
+    if(inInstSection && r.length >= 3) {
+      const name = String(r[0] || '').trim();
+      const code = String(r[1] || '').trim();
+      const target = parseFloat(String(r[2] || '').replace(/[^\d.-]/g, '')) || 0;
+      if(name && name !== 'Institution Name' && !name.includes('add more')) {
+        insts.push({name, code, target, notes: String(r[3] || '').trim()});
+      }
+    }
+    
+    // Parse members
+    if(inMemberSection && r.length >= 4) {
+      const name = String(r[0] || '').trim();
+      const short = String(r[1] || '').trim() || name.split(' ')[0];
+      const status = String(r[2] || '').trim().toUpperCase();
+      const inst = String(r[3] || '').trim();
+      if(name && name !== 'Full Name' && !name.includes('add more') && 
+         ['ACTIVE','OFF','LEAVE','RESIGNED'].includes(status)) {
+        members.push({name, short, status, inst, phone: String(r[4] || '').trim()});
+      }
     }
   }
+  
   if(insts.length) RAW.config.institutions = insts;
   if(members.length) RAW.config.members = members;
 }
 
 function parseDups(rows){
-  const hi = rows.findIndex(r=>r.some(c=>c.toLowerCase().includes('date')));
+  const hi = rows.findIndex(r=>r.some(c=>String(c).toLowerCase().includes('date')));
   if(hi<0) return;
-  const hdr=rows[hi].map(c=>c.toLowerCase());
-  const col=n=>hdr.indexOf(n);
+  const hdr=rows[hi].map(c=>String(c).toLowerCase());
+  const col = (keywords) => {
+    for(let i=0;i<hdr.length;i++){
+      if(keywords.some(k => hdr[i].includes(k))) return i;
+    }
+    return -1;
+  };
   const dups=[];
   for(let i=hi+1;i<rows.length;i++){
     const r=rows[i];
-    if(!r[col('employee number')]&&!r[2]) continue;
-    dups.push({
-      date:r[col('date')]||'',
-      empNo:r[col('employee number')]||r[2]||'',
-      owner1:r[col('owner 1')]||r[3]||'',
-      owner2:r[col('owner 2')]||r[4]||'',
-      inst:r[col('institution')]||r[5]||'',
-    });
+    if(r.length < 3) continue;
+    const date = r[col(['date'])] || r[1] || '';
+    const empNo = r[col(['employee', 'emp'])] || r[2] || '';
+    const owner1 = r[col(['owner 1', 'owner1'])] || r[3] || '';
+    const owner2 = r[col(['owner 2', 'owner2'])] || r[4] || '';
+    const inst = r[col(['institution', 'inst'])] || r[5] || '';
+    if(empNo && owner1 && owner2) {
+      dups.push({date: cleanDate(date), empNo, owner1, owner2, inst});
+    }
   }
   if(dups.length) RAW.duplicates=dups;
 }
@@ -1132,10 +1188,29 @@ function renderKPIs(){
     ? RAW.duplicates.filter(d=>d.inst===FILTERED.inst)
     : RAW.duplicates;
 
-  // Members scoped to institution filter
-  const scopedMembers = FILTERED.inst!=='all'
-    ? RAW.config.members.filter(m=>m.inst===FILTERED.inst)
-    : RAW.config.members;
+  // Members scoped to institution filter — include both CONFIG and data-based members
+  let scopedMembers = [];
+  if(FILTERED.inst!=='all') {
+    // Members from CONFIG for this institution
+    scopedMembers = RAW.config.members.filter(m=>m.inst===FILTERED.inst);
+    // Also include anyone with data in this institution
+    const membersWithData = [...new Set(RAW.stats.filter(s=>s.inst===FILTERED.inst).map(s=>s.owner))];
+    membersWithData.forEach(name=>{
+      if(!scopedMembers.some(m=>matchMemberName(name, m))) {
+        scopedMembers.push({name, short:name.split(' ')[0], status:'ACTIVE', inst:FILTERED.inst});
+      }
+    });
+  } else {
+    scopedMembers = [...RAW.config.members];
+    // Also include any data owners not in CONFIG
+    const dataOwners = [...new Set(RAW.stats.map(s=>s.owner).filter(Boolean))];
+    dataOwners.forEach(name=>{
+      if(!scopedMembers.some(m=>matchMemberName(name, m))) {
+        scopedMembers.push({name, short:name.split(' ')[0], status:'ACTIVE', inst:''});
+      }
+    });
+  }
+  
   const activeMembers = scopedMembers.filter(m=>m.status==='ACTIVE').length;
 
   // Filter label for sub text
@@ -1234,21 +1309,57 @@ function renderProgress(){
     const s=getInstStats(inst.name, RAW.stats);
     const pct=Math.min(100,s.pct*100).toFixed(1);
 
-    // Per-owner within this institution — use actual data entries
-    const ownerMap={};
+    // Per-owner within this institution — use flexible matching
+    const ownerMap = new Map(); // Use Map to track by member name
+    const processedNames = new Set();
+    
     RAW.stats.filter(x=>x.inst===inst.name).forEach(x=>{
-      if(x.owner) ownerMap[x.owner]=(ownerMap[x.owner]||0)+x.count;
+      if(!x.owner) return;
+      
+      // Try to find matching member
+      let matchedMember = null;
+      for(let member of RAW.config.members) {
+        if(matchMemberName(x.owner, member)) {
+          matchedMember = member;
+          break;
+        }
+      }
+      
+      const key = matchedMember ? matchedMember.name : x.owner;
+      if(!processedNames.has(key)) {
+        processedNames.add(key);
+        // Sum all stats for this person across all entries
+        const total = RAW.stats.filter(s => 
+          s.inst === inst.name && matchMemberName(s.owner, {name: key, short: key.split(' ')[0]})
+        ).reduce((sum, s) => sum + s.count, 0);
+        ownerMap.set(key, total);
+      }
     });
-    const owners=Object.entries(ownerMap).sort((a,b)=>b[1]-a[1]);
-    const maxCount=owners.length?Math.max(...owners.map(o=>o[1])):1;
+    
+    // Also add members from CONFIG who have no data but belong to this institution
+    RAW.config.members.forEach(member => {
+      if(member.inst === inst.name && !processedNames.has(member.name)) {
+        ownerMap.set(member.name, 0);
+        processedNames.add(member.name);
+      }
+    });
+    
+    // Convert Map to array and sort by count
+    const owners = Array.from(ownerMap.entries()).sort((a,b) => b[1] - a[1]);
+    const maxCount = owners.length ? Math.max(...owners.map(o => o[1]), 1) : 1;
 
-    const ownerBars=owners.slice(0,6).map(([name,cnt])=>{
-      const pctO=(cnt/maxCount*100).toFixed(0);
-      const mem=RAW.config.members.find(m=>m.name===name);
-      const dotClass=mem?{ACTIVE:'dot-active',OFF:'dot-off',LEAVE:'dot-leave'}[mem.status]||'dot-off':'dot-active';
+    const ownerBars = owners.slice(0,8).map(([name,cnt])=>{
+      const pctO = (cnt / maxCount * 100).toFixed(0);
+      const mem = RAW.config.members.find(m => m.name === name);
+      const dotClass = mem ? {ACTIVE:'dot-active',OFF:'dot-off',LEAVE:'dot-leave'}[mem.status] || 'dot-off' : 'dot-active';
+      const displayName = mem ? (mem.short || name.split(' ')[0]) : name.split(' ')[0];
+      
+      // Special case for Delight
+      const finalDisplay = displayName === 'Delight' ? 'Delight' : displayName;
+      
       return `<div class="owner-row">
         <div class="owner-status-dot ${dotClass}"></div>
-        <span class="owner-name" title="${name}">${name.split(' ')[0]}</span>
+        <span class="owner-name" title="${name}">${finalDisplay}</span>
         <div class="owner-track"><div class="owner-fill" style="width:${pctO}%"></div></div>
         <span class="owner-num">${cnt}</span>
       </div>`;
@@ -1305,7 +1416,7 @@ function renderProgress(){
       <div class="track"><div class="fill" style="width:${pct}%;background:linear-gradient(90deg,${fillColor},${fillColor}bb)"></div></div>
       <div class="prog-meta"><span>${s.captured.toLocaleString()} captured</span><span>${s.balance.toLocaleString()} remaining</span></div>
       ${miniBars}
-      ${ownerBars||'<div style="font-size:10px;color:var(--dim);margin-top:6px">No data yet for this institution</div>'}`;
+      ${ownerBars || '<div style="font-size:10px;color:var(--dim);margin-top:6px">No data yet for this institution</div>'}`;
     g.appendChild(div);
   });
 }
@@ -1350,7 +1461,27 @@ function renderDuplicates(){
 function renderTeam(){
   const tb=document.getElementById('teamTbody');
   tb.innerHTML='';
-  let members=RAW.config.members;
+  
+  // Start with CONFIG members
+  let membersMap = new Map();
+  RAW.config.members.forEach(m => membersMap.set(m.name, {...m}));
+  
+  // Add any data owners not in CONFIG
+  const dataOwners = [...new Set(RAW.stats.map(s=>s.owner).filter(Boolean))];
+  dataOwners.forEach(name=>{
+    let found = false;
+    for(let [key, m] of membersMap.entries()) {
+      if(matchMemberName(name, m)) {
+        found = true;
+        break;
+      }
+    }
+    if(!found) {
+      membersMap.set(name, {name, short:name.split(' ')[0], status:'ACTIVE', inst:''});
+    }
+  });
+  
+  let members = Array.from(membersMap.values());
 
   if(FILTERED.inst!=='all'){
     // Include member if: (a) CONFIG says they belong to this inst, OR
@@ -1358,20 +1489,18 @@ function renderTeam(){
     const membersWithData = new Set(
       RAW.stats.filter(s=>s.inst===FILTERED.inst).map(s=>s.owner)
     );
-    members = members.filter(m=>
-      m.inst===FILTERED.inst || membersWithData.has(m.name)
-    );
+    members = members.filter(m => {
+      if(m.inst === FILTERED.inst) return true;
+      for(let dataName of membersWithData) {
+        if(matchMemberName(dataName, m)) return true;
+      }
+      return false;
+    });
   }
-  if(FILTERED.member!=='all') members=members.filter(m=>m.name===FILTERED.member);
-
-  // Also include any data owners not in CONFIG members list
-  const knownNames = new Set(members.map(m=>m.name));
-  const dataOwners = [...new Set(FILTERED.stats.map(s=>s.owner).filter(Boolean))];
-  dataOwners.forEach(name=>{
-    if(!knownNames.has(name)){
-      members = [...members, {name, short:name.split(' ')[0], status:'ACTIVE', inst:''}];
-    }
-  });
+  
+  if(FILTERED.member!=='all') {
+    members = members.filter(m => matchMemberName(FILTERED.member, m));
+  }
 
   const active=members.filter(m=>m.status==='ACTIVE').length;
   document.getElementById('teamSummaryBadge').textContent=`${active} active / ${members.length} total`;
@@ -1379,16 +1508,35 @@ function renderTeam(){
   if(!members.length){ tb.innerHTML='<tr><td colspan="6" class="no-data">No members</td></tr>'; return; }
 
   members.forEach(m=>{
-    const captured=RAW.stats.filter(s=>s.owner===m.name).reduce((a,s)=>a+s.count,0);
-    const dates=RAW.stats.filter(s=>s.owner===m.name&&s.count>0).map(s=>s.date).sort();
-    const lastDate=dates.length?dates[dates.length-1]:'—';
-    const dups=RAW.duplicates.filter(d=>d.owner1===m.name||d.owner2===m.name).length;
+    // Sum captures for this member (flexible matching)
+    let captured = 0;
+    RAW.stats.forEach(s=>{
+      if(matchMemberName(s.owner, m)) captured += s.count;
+    });
+    
+    // Last active date
+    const dates = RAW.stats.filter(s=>matchMemberName(s.owner, m) && s.count>0).map(s=>s.date).sort();
+    const lastDate = dates.length ? dates[dates.length-1] : '—';
+    
+    // Count duplicates
+    let dups = 0;
+    RAW.duplicates.forEach(d=>{
+      if(matchMemberName(d.owner1, m) || matchMemberName(d.owner2, m)) dups++;
+    });
+    
     const statusMap={ACTIVE:'tag-active',OFF:'tag-off',LEAVE:'tag-leave'};
     const tagClass=statusMap[m.status]||'tag-off';
+    const instDisplay = m.inst || (() => {
+      // Try to find institution from data
+      for(let s of RAW.stats) {
+        if(matchMemberName(s.owner, m) && s.inst) return s.inst;
+      }
+      return '';
+    })();
 
     const tr=document.createElement('tr');
     tr.innerHTML=`<td style="font-weight:600">${m.name}</td>
-      <td><span class="tag tag-inst">${m.inst}</span></td>
+      <td><span class="tag tag-inst">${instDisplay}</span></td>
       <td><span class="tag ${tagClass}">${m.status}</span></td>
       <td style="font-weight:700;font-family:'DM Mono',monospace;color:var(--teal2)">${captured.toLocaleString()}</td>
       <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${lastDate}</td>
@@ -1416,6 +1564,9 @@ function checkAdminPass(){
   if(v===adminPass()){
     isAdmin=true;
     closeModal('adminGate');
+    document.getElementById('adminBtn').style.display = 'flex';
+    document.getElementById('connectBtn').style.display = 'flex';
+    document.getElementById('cfgBar').style.display = 'flex';
     populateAdminSelects();
     openModal('adminModal');
   } else {
