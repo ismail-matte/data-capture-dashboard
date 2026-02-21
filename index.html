@@ -234,15 +234,15 @@ code{background:var(--s3);padding:1px 5px;border-radius:3px;font-size:10px;font-
       </div>
       <button class="btn btn-ghost" onclick="refreshData()">↺</button>
       <button class="btn btn-primary" id="adminBtn" onclick="openAdmin()" style="display:none">⚙ Admin</button>
-      <button class="btn btn-ghost" onclick="openConnect()">🔗 Connect</button>
+      <button class="btn btn-ghost" id="connectBtn" onclick="openConnect()" style="display:none">🔗 Connect</button>
       <button class="btn btn-red" onclick="lockApp()" style="font-size:10px">🔒 Lock</button>
     </div>
   </header>
 
   <div class="main">
 
-    <!-- connect bar -->
-    <div class="cfg-bar" id="cfgBar">
+    <!-- connect bar — admin only -->
+    <div class="cfg-bar" id="cfgBar" style="display:none">
       <span>🔗</span>
       <span class="cfg-url" id="cfgUrl">No Google Sheet connected — click Connect to link live data</span>
       <button class="btn btn-ghost" style="padding:3px 9px;font-size:10px" onclick="openConnect()">Connect</button>
@@ -551,6 +551,18 @@ code{background:var(--s3);padding:1px 5px;border-radius:3px;font-size:10px;font-
 let CFG = {};
 try { CFG = JSON.parse(localStorage.getItem('dc_cfg') || '{}'); } catch(e){}
 
+// ── HARDCODED DEFAULTS (pre-configured by admin) ──
+const DEFAULTS = {
+  urlStats:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vRT318YUbN2yDLBAvnGmTO90CzrkHfPSHj_RAuFh1s-pN2YuDjOtYtbuttElr6pK4I4_IHlXWGuOFol/pub?gid=686195105&single=true&output=csv',
+  urlConfig:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRT318YUbN2yDLBAvnGmTO90CzrkHfPSHj_RAuFh1s-pN2YuDjOtYtbuttElr6pK4I4_IHlXWGuOFol/pub?gid=1076946811&single=true&output=csv',
+  urlDups:       '',
+  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbwt6dAbu1QzTlL_l5Qb5S7D6q51kg0UWKFqoLLIZo_PzH63zCYhy-Ku7r8H0Q0q0JI/exec',
+  teamPass:      'ARUA2026',
+  adminPass:     'ADMIN@2026',
+};
+// Merge: saved config overrides defaults, but defaults fill any gaps
+CFG = Object.assign({}, DEFAULTS, CFG);
+
 let RAW = {
   stats:[],
   config:{ institutions:[], members:[] },
@@ -577,7 +589,11 @@ function tryUnlock(){
     if(v === adminPass()) isAdmin = true;
     document.getElementById('lockScreen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
-    if(isAdmin) document.getElementById('adminBtn').style.display = 'flex';
+    if(isAdmin){
+      document.getElementById('adminBtn').style.display = 'flex';
+      document.getElementById('connectBtn').style.display = 'flex';
+      document.getElementById('cfgBar').style.display = 'flex';
+    }
     initApp();
   } else {
     err.textContent = '✗ Incorrect passcode. Try again.';
@@ -594,6 +610,8 @@ function lockApp(){
   document.getElementById('app').style.display = 'none';
   document.getElementById('lockScreen').style.display = 'flex';
   document.getElementById('adminBtn').style.display = 'none';
+  document.getElementById('connectBtn').style.display = 'none';
+  document.getElementById('cfgBar').style.display = 'none';
   stopAutoRefresh();
 }
 
@@ -641,6 +659,7 @@ function initApp(){
   populateFilters();
   applyFilters();
 
+  // Always auto-fetch since URLs are pre-configured
   if(CFG.urlStats){
     document.getElementById('cfgBar').classList.add('connected');
     document.getElementById('cfgUrl').textContent = CFG.urlStats;
