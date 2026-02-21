@@ -748,43 +748,102 @@ function cleanDate(raw){
 
 function parseStats(rows){
   if(!rows.length) return;
-  // Find BEST header row — must have both institution + owner columns
+  console.log('CSV rows received:',rows.length);
+
+  // Print first 5 rows to see exact structure
+  rows.slice(0,5).forEach((r,i)=>console.log('Row'+i+':',JSON.stringify(r)));
+
+  // Strategy: scan every row looking for actual data rows
+  // A data row has: a recognisable institution name AND a person name AND a number
+  const INSTITUTIONS = [
+    'arua rrh','arua city','arua dlg','yumbe rrh',
+    'rrh','city','dlg','yumbe'
+  ];
+
+  // First try to find a proper header row
   let hi = -1;
-  for(let i=0;i<Math.min(rows.length,10);i++){
-    const r=rows[i].map(c=>String(c).toLowerCase().trim());
-    if(r.some(c=>c.includes('institution'))&&r.some(c=>c.includes('owner'))){hi=i;break;}
+  for(let i=0;i<Math.min(rows.length,8);i++){
+    const cells = rows[i].map(c=>String(c).toLowerCase().trim());
+    const hasInst  = cells.some(c=>c==='institution'||c==='inst');
+    const hasOwner = cells.some(c=>c.includes('owner'));
+    const hasCount = cells.some(c=>c.includes('file')||c.includes('capture')||c.includes('count'));
+    if(hasInst && hasOwner){ hi=i; break; }
+    if(hasOwner && hasCount){ hi=i; break; }
   }
-  if(hi<0) hi=rows.findIndex(r=>r.some(c=>String(c).toLowerCase().includes('date')));
-  if(hi<0) hi=0;
-  const hdr=rows[hi].map(c=>String(c).toLowerCase().trim());
-  const iDate  = hdr.findIndex(h=>h.includes('date'));
-  const iInst  = hdr.findIndex(h=>h.includes('institution'));
-  const iOwner = hdr.findIndex(h=>h.includes('data owner')||h==='owner');
-  const iCount = hdr.findIndex(h=>h.includes('files')||h.includes('captured'));
-  const iDuty  = hdr.findIndex(h=>h.includes('duty'));
-  const iNotes = hdr.findIndex(h=>h.includes('note'));
-  console.log('Stats header row:',hi,'| date:',iDate,'inst:',iInst,'owner:',iOwner,'count:',iCount);
-  const parsed=[];
-  for(let i=hi+1;i<rows.length;i++){
-    const r=rows[i];
-    const inst  = iInst>=0  ? String(r[iInst] ||'').trim() : '';
-    const owner = iOwner>=0 ? String(r[iOwner]||'').trim() : '';
-    if(!inst||!owner) continue;
-    if(inst.toLowerCase().includes('institution')) continue;
-    if(inst.toLowerCase().includes('enter one')) continue;
-    const cnt=parseFloat(iCount>=0?r[iCount]:0);
-    if(isNaN(cnt)) continue;
-    parsed.push({
-      date:  cleanDate(iDate>=0?r[iDate]:''),
-      inst:  inst,
-      owner: owner,
-      count: cnt,
-      duty:  iDuty>=0  ? String(r[iDuty] ||'YES').trim() : 'YES',
-      notes: iNotes>=0 ? String(r[iNotes]||'').trim()    : '',
+
+  let parsed = [];
+
+  if(hi >= 0){
+    // Use header-based parsing
+    const hdr = rows[hi].map(c=>String(c).toLowerCase().trim());
+    console.log('Header row',hi,':',JSON.stringify(hdr));
+
+    // Find columns by position — print all headers so we can see them
+    let iDate=-1, iInst=-1, iOwner=-1, iCount=-1, iDuty=-1, iNotes=-1;
+    hdr.forEach((h,i)=>{
+      if(h.includes('date') && iDate<0)    iDate=i;
+      if(h.includes('inst') && iInst<0)    iInst=i;
+      if(h.includes('owner') && iOwner<0)  iOwner=i;
+      if((h.includes('file')||h.includes('capture')||h.includes('count')) && iCount<0) iCount=i;
+      if(h.includes('duty') && iDuty<0)    iDuty=i;
+      if(h.includes('note') && iNotes<0)   iNotes=i;
     });
+    console.log('Columns — date:',iDate,'inst:',iInst,'owner:',iOwner,'count:',iCount);
+
+    for(let i=hi+1;i<rows.length;i++){
+      const r=rows[i];
+      const inst  = iInst>=0  ? String(r[iInst] ||'').trim() : '';
+      const owner = iOwner>=0 ? String(r[iOwner]||'').trim() : '';
+      const dateV = iDate>=0  ? String(r[iDate] ||'').trim() : '';
+      const cntV  = iCount>=0 ? String(r[iCount]||'')        : '0';
+      if(!inst||!owner) continue;
+      if(inst.toLowerCase().includes('institution')) continue;
+      const cnt = parseFloat(cntV.replace(/,/g,''));
+      if(isNaN(cnt)) continue;
+      parsed.push({
+        date: cleanDate(dateV), inst, owner, count:cnt,
+        duty:  iDuty>=0  ? String(r[iDuty] ||'YES') : 'YES',
+        notes: iNotes>=0 ? String(r[iNotes]||'')    : '',
+      });
+    }
   }
-  console.log('Parsed',parsed.length,'rows. Sample:', parsed.slice(0,3).map(r=>r.inst+'/'+r.owner+'/'+r.count));
-  if(parsed.length) RAW.stats=parsed;
+
+  // FALLBACK: if header parsing failed or found nothing,
+  // scan every row and detect data rows by institution name
+  if(parsed.length === 0){
+    console.warn('Header parse failed — trying positional fallback');
+    for(let i=0;i<rows.length;i++){
+      const r=rows[i];
+      if(r.length < 4) continue;
+      // Try each cell as potential institution
+      for(let c=0;c<Math.min(r.length,5);c++){
+        const val = String(r[c]||'').toLowerCase().trim();
+        if(INSTITUTIONS.some(inst=>val===inst||val.includes(inst))){
+          // Found institution — now find number in this row
+          let num = -1, numCol = -1;
+          for(let j=c+1;j<r.length;j++){
+            const n = parseFloat(String(r[j]||'').replace(/,/g,''));
+            if(!isNaN(n) && n>=0){ num=n; numCol=j; break; }
+          }
+          if(numCol<0) continue;
+          // owner is likely the cell before institution or after
+          const owner = String(r[c>0?c-1:c+1]||'').trim();
+          const date  = cleanDate(String(r[1]||'').trim());
+          if(owner && owner.length>2){
+            parsed.push({date, inst:String(r[c]||'').trim(), owner, count:num, duty:'YES', notes:''});
+          }
+          break;
+        }
+      }
+    }
+    console.log('Fallback found',parsed.length,'rows');
+  }
+
+  console.log('FINAL parsed count:',parsed.length);
+  if(parsed.length>0){
+    console.log('Sample:',parsed.slice(0,3).map(p=>p.date+'|'+p.inst+'|'+p.owner+'|'+p.count).join(' // '));
+    RAW.stats=parsed;
+  }
 }
 
 function parseConfig(rows){
