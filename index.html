@@ -627,17 +627,17 @@ function matchMemberName(dataName, member) {
   if (d === full) return true;
   if (short && d === short) return true;
   
-  // Contains match (for variations like "Cotil Delight" vs "Dilght Cotilda")
+  // Contains match
   if (full && (full.includes(d) || d.includes(full))) return true;
   if (short && (d.includes(short) || short.includes(d))) return true;
   
-  // Split into words and check if any word matches
+  // Split into words
   const dWords = d.split(/\s+/);
   const fullWords = full ? full.split(/\s+/) : [];
   const shortWords = short ? short.split(/\s+/) : [];
   
   for (let dw of dWords) {
-    if (dw.length < 3) continue; // Skip very short words
+    if (dw.length < 3) continue;
     for (let fw of fullWords) {
       if (fw.includes(dw) || dw.includes(fw)) return true;
     }
@@ -646,9 +646,9 @@ function matchMemberName(dataName, member) {
     }
   }
   
-  // Special case for Cotil/Delight
-  if (d.includes('cotil') && (full.includes('cotilda') || short === 'delight')) return true;
-  if (d.includes('delight') && (full.includes('cotilda') || short === 'delight')) return true;
+  // Special cases
+  if ((d.includes('cotil') || d.includes('delight')) && 
+      (full.includes('cotilda') || short === 'delight')) return true;
   
   return false;
 }
@@ -1309,57 +1309,71 @@ function renderProgress(){
     const s=getInstStats(inst.name, RAW.stats);
     const pct=Math.min(100,s.pct*100).toFixed(1);
 
-    // Per-owner within this institution — use flexible matching
-    const ownerMap = new Map(); // Use Map to track by member name
-    const processedNames = new Set();
+    // Create a map of owner name to total count
+    const ownerTotals = new Map();
     
-    RAW.stats.filter(x=>x.inst===inst.name).forEach(x=>{
-      if(!x.owner) return;
+    // First, get all stats for this institution
+    const instStats = RAW.stats.filter(x => x.inst === inst.name);
+    
+    // For each stat entry, find the matching member or use the raw owner name
+    instStats.forEach(stat => {
+      if (!stat.owner) return;
       
-      // Try to find matching member
+      // Try to find a matching member in CONFIG
       let matchedMember = null;
-      for(let member of RAW.config.members) {
-        if(matchMemberName(x.owner, member)) {
+      for (let member of RAW.config.members) {
+        if (matchMemberName(stat.owner, member)) {
           matchedMember = member;
           break;
         }
       }
       
-      const key = matchedMember ? matchedMember.name : x.owner;
-      if(!processedNames.has(key)) {
-        processedNames.add(key);
-        // Sum all stats for this person across all entries
-        const total = RAW.stats.filter(s => 
-          s.inst === inst.name && matchMemberName(s.owner, {name: key, short: key.split(' ')[0]})
-        ).reduce((sum, s) => sum + s.count, 0);
-        ownerMap.set(key, total);
-      }
+      // Use the matched member name if found, otherwise use the raw owner name
+      const key = matchedMember ? matchedMember.name : stat.owner;
+      
+      // Sum up the counts
+      const currentTotal = ownerTotals.get(key) || 0;
+      ownerTotals.set(key, currentTotal + stat.count);
     });
     
-    // Also add members from CONFIG who have no data but belong to this institution
+    // Also add members from CONFIG who belong to this institution but have no data
     RAW.config.members.forEach(member => {
-      if(member.inst === inst.name && !processedNames.has(member.name)) {
-        ownerMap.set(member.name, 0);
-        processedNames.add(member.name);
+      if (member.inst === inst.name && !ownerTotals.has(member.name)) {
+        ownerTotals.set(member.name, 0);
       }
     });
     
-    // Convert Map to array and sort by count
-    const owners = Array.from(ownerMap.entries()).sort((a,b) => b[1] - a[1]);
+    // Convert to array and sort by count (descending)
+    const owners = Array.from(ownerTotals.entries())
+      .sort((a, b) => b[1] - a[1]);
+    
     const maxCount = owners.length ? Math.max(...owners.map(o => o[1]), 1) : 1;
 
-    const ownerBars = owners.slice(0,8).map(([name,cnt])=>{
+    // Build owner bars
+    const ownerBars = owners.slice(0, 8).map(([name, cnt]) => {
       const pctO = (cnt / maxCount * 100).toFixed(0);
       const mem = RAW.config.members.find(m => m.name === name);
-      const dotClass = mem ? {ACTIVE:'dot-active',OFF:'dot-off',LEAVE:'dot-leave'}[mem.status] || 'dot-off' : 'dot-active';
-      const displayName = mem ? (mem.short || name.split(' ')[0]) : name.split(' ')[0];
       
+      // Determine status dot color
+      let dotClass = 'dot-active';
+      if (mem) {
+        if (mem.status === 'OFF') dotClass = 'dot-off';
+        else if (mem.status === 'LEAVE') dotClass = 'dot-leave';
+      }
+      
+      // Use short name or first name for display
+      let displayName = name.split(' ')[0];
+      if (mem && mem.short) {
+        displayName = mem.short;
+      }
       // Special case for Delight
-      const finalDisplay = displayName === 'Delight' ? 'Delight' : displayName;
+      if (displayName === 'Delight' || name.toLowerCase().includes('delight') || name.toLowerCase().includes('cotil')) {
+        displayName = 'Delight';
+      }
       
       return `<div class="owner-row">
         <div class="owner-status-dot ${dotClass}"></div>
-        <span class="owner-name" title="${name}">${finalDisplay}</span>
+        <span class="owner-name" title="${name}">${displayName}</span>
         <div class="owner-track"><div class="owner-fill" style="width:${pctO}%"></div></div>
         <span class="owner-num">${cnt}</span>
       </div>`;
