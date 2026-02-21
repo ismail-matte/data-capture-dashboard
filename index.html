@@ -734,6 +734,18 @@ async function fetchAll(){
   applyFilters();
 }
 
+function cleanDate(raw){
+  if(!raw) return "";
+  const s = String(raw).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ]/);
+  if(m) return m[1];
+  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(slash) return `${slash[3]}-${slash[2].padStart(2,"0")}-${slash[1].padStart(2,"0")}`;
+  try{ const d=new Date(s); if(!isNaN(d)) return d.toISOString().split("T")[0]; }catch(e){}
+  return s;
+}
+
 function parseStats(rows){
   if(!rows.length) return;
   // Find header row
@@ -751,7 +763,7 @@ function parseStats(rows){
     const cnt = parseFloat(r[iCount]);
     if(isNaN(cnt)) continue;
     parsed.push({
-      date: r[iDate]||'',
+      date: cleanDate(r[iDate]),
       inst: r[iInst]||'',
       owner: r[iOwner]||'',
       count: cnt,
