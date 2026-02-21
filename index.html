@@ -77,7 +77,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
 /* ── KPI GRID ── */
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px}
-.kpi-card{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:16px 18px;position:relative;overflow:hidden;transition:all .2s;cursor:default}
+.kpi-card{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:16px 18px 16px 18px;position:relative;overflow:hidden;transition:all .2s;cursor:default;min-height:130px}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ac,var(--teal))}
 .kpi-card:hover{border-color:var(--teal);transform:translateY(-2px)}
 .kpi-icon{font-size:18px;margin-bottom:6px}
@@ -90,6 +90,28 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .b-red{background:rgba(192,57,43,.15);color:#E74C3C;border:1px solid rgba(231,76,60,.3)}
 .b-blue{background:rgba(46,134,171,.15);color:var(--teal2);border:1px solid rgba(46,134,171,.3)}
 .b-gold{background:rgba(240,165,0,.15);color:var(--gold);border:1px solid rgba(240,165,0,.3)}
+
+
+/* ── DONUT CHART ── */
+.donut-wrap{position:absolute;top:14px;right:14px;width:56px;height:56px;z-index:1}
+.donut-svg{width:56px;height:56px;transform:rotate(-90deg);display:block}
+.donut-bg{fill:none;stroke:var(--s3);stroke-width:5}
+.donut-fill{fill:none;stroke-width:5;stroke-linecap:round;transition:stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)}
+.donut-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:'DM Mono',monospace}
+
+/* ── SPARKLINE ── */
+.sparkline-wrap{margin-top:12px;height:40px;position:relative;border-top:1px solid var(--border);padding-top:8px}
+.sparkline-svg{width:100%;height:32px;overflow:visible}
+.spark-line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.spark-area{opacity:.18}
+.spark-dot{r:3;transition:r .2s}
+.spark-dot:hover{r:5}
+
+/* ── MINI BAR CHART ── */
+.mini-bars{display:flex;align-items:flex-end;gap:3px;height:32px;margin-top:10px}
+.mini-bar{flex:1;border-radius:3px 3px 0 0;min-width:6px;transition:height .8s cubic-bezier(.4,0,.2,1);position:relative;cursor:default}
+.mini-bar:hover{opacity:.8}
+.mini-bar-lbl{position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:7px;color:var(--dim);font-family:'DM Mono',monospace;white-space:nowrap}
 
 /* ── PROGRESS ── */
 .prog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-bottom:20px}
@@ -265,6 +287,19 @@ code{background:var(--s3);padding:1px 5px;border-radius:3px;font-size:10px;font-
     <!-- PROGRESS BARS -->
     <div class="slabel">Progress by Institution</div>
     <div class="prog-grid" id="progGrid"></div>
+
+    <!-- DAILY TREND CHART -->
+    <div class="slabel">Daily Capture Trend</div>
+    <div class="tcard" style="margin-bottom:20px;padding:18px 22px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div>
+          <div style="font-size:13px;font-weight:700">📅 Files Captured Per Day</div>
+          <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px">All institutions combined</div>
+        </div>
+        <div id="trendLegend" style="display:flex;gap:14px"></div>
+      </div>
+      <div id="trendChart" style="height:120px;position:relative;margin-bottom:20px"></div>
+    </div>
 
     <!-- BOTTOM ROW -->
     <div class="slabel">Activity & Alerts</div>
@@ -945,9 +980,119 @@ function applyFilters(){
 // ═══════════════════════════════════════════════
 //  RENDER
 // ═══════════════════════════════════════════════
+
+// ── TREND CHART ──────────────────────────────────────────────
+function renderTrend(){
+  const el = document.getElementById('trendChart');
+  const legend = document.getElementById('trendLegend');
+  if(!el) return;
+
+  // Build per-institution daily data
+  const COLORS = {
+    'Arua RRH':  '#2E86AB',
+    'Arua City': '#F0A500',
+    'Arua DLG':  '#1A9C5B',
+    'Yumbe RRH': '#6C3483',
+  };
+  const DEFAULT_COLORS = ['#2E86AB','#F0A500','#1A9C5B','#6C3483','#E67E22','#C0392B'];
+
+  const data = FILTERED.stats.length ? FILTERED.stats : RAW.stats;
+
+  // Get all unique dates sorted
+  const allDates = [...new Set(data.map(s=>s.date).filter(Boolean))].sort();
+  if(allDates.length === 0){ el.innerHTML='<div style="text-align:center;padding:40px;color:var(--dim);font-size:11px">No date data available</div>'; return; }
+
+  // Get institutions in scope
+  const instNames = [...new Set(data.map(s=>s.inst).filter(Boolean))];
+
+  // Build dataset per institution per date
+  const datasets = instNames.map((inst,idx)=>{
+    const color = COLORS[inst] || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
+    const vals  = allDates.map(d=> data.filter(s=>s.inst===inst&&s.date===d).reduce((a,s)=>a+s.count,0));
+    return { inst, color, vals };
+  });
+
+  // Also build combined total line
+  const totalVals = allDates.map(d=> data.filter(s=>s.date===d).reduce((a,s)=>a+s.count,0));
+
+  const W=el.clientWidth||700, H=110;
+  const PAD={top:10,right:20,bottom:28,left:36};
+  const chartW=W-PAD.left-PAD.right, chartH=H-PAD.top-PAD.bottom;
+
+  const maxVal = Math.max(...totalVals, 1);
+  const xStep  = allDates.length>1 ? chartW/(allDates.length-1) : chartW;
+
+  const toX = i  => PAD.left + (allDates.length>1 ? i*xStep : chartW/2);
+  const toY = v  => PAD.top  + chartH - (v/maxVal)*chartH;
+
+  // Build SVG
+  let svg = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">`;
+
+  // Grid lines
+  [0,.25,.5,.75,1].forEach(frac=>{
+    const y = PAD.top + chartH*(1-frac);
+    const lbl = Math.round(maxVal*frac);
+    svg += `<line x1="${PAD.left}" y1="${y.toFixed(1)}" x2="${W-PAD.right}" y2="${y.toFixed(1)}"
+      stroke="rgba(30,53,80,0.6)" stroke-width="1" stroke-dasharray="${frac===0?'0':'4,4'}"/>`;
+    svg += `<text x="${PAD.left-4}" y="${(y+3).toFixed(1)}" text-anchor="end"
+      font-size="8" fill="#3D6080" font-family="DM Mono,monospace">${lbl}</text>`;
+  });
+
+  // Per-institution area + line
+  datasets.forEach(ds=>{
+    if(ds.vals.every(v=>v===0)) return;
+    const pts = ds.vals.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
+    const area = `${toX(0).toFixed(1)},${(PAD.top+chartH).toFixed(1)} ${pts.join(' ')} ${toX(allDates.length-1).toFixed(1)},${(PAD.top+chartH).toFixed(1)}`;
+    svg += `<polygon points="${area}" fill="${ds.color}" opacity="0.08"/>`;
+    svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="${ds.color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`;
+  });
+
+  // Total line (bold)
+  if(datasets.length > 1){
+    const pts = totalVals.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
+    svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="#E8F4F8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    totalVals.forEach((v,i)=>{
+      svg += `<circle cx="${toX(i).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3" fill="#E8F4F8"/>`;
+      svg += `<text x="${toX(i).toFixed(1)}" y="${(toY(v)-7).toFixed(1)}" text-anchor="middle" font-size="8" fill="#E8F4F8" font-family="DM Mono,monospace" font-weight="600">${v}</text>`;
+    });
+  } else if(datasets.length===1){
+    const ds=datasets[0];
+    const pts = ds.vals.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
+    ds.vals.forEach((v,i)=>{
+      svg += `<circle cx="${toX(i).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3" fill="${ds.color}"/>`;
+      svg += `<text x="${toX(i).toFixed(1)}" y="${(toY(v)-7).toFixed(1)}" text-anchor="middle" font-size="8" fill="${ds.color}" font-family="DM Mono,monospace" font-weight="600">${v}</text>`;
+    });
+  }
+
+  // X-axis date labels
+  allDates.forEach((d,i)=>{
+    const lbl = d.slice(5); // MM-DD
+    svg += `<text x="${toX(i).toFixed(1)}" y="${(PAD.top+chartH+16).toFixed(1)}" text-anchor="middle"
+      font-size="8" fill="#3D6080" font-family="DM Mono,monospace">${lbl}</text>`;
+  });
+
+  svg += '</svg>';
+  el.innerHTML = svg;
+
+  // Legend
+  if(legend){
+    let legHTML = '';
+    if(datasets.length > 1){
+      legHTML += `<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)">
+        <div style="width:14px;height:2px;background:#E8F4F8;border-radius:2px"></div>Total</div>`;
+    }
+    datasets.filter(ds=>ds.vals.some(v=>v>0)).forEach(ds=>{
+      legHTML += `<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)">
+        <div style="width:10px;height:10px;border-radius:50%;background:${ds.color}"></div>${ds.inst.replace('Arua ','')}</div>`;
+    });
+    legend.innerHTML = legHTML;
+  }
+}
+
 function render(){
   renderKPIs();
   renderProgress();
+  renderTrend();
   renderEntries();
   renderDuplicates();
   renderTeam();
@@ -998,22 +1143,82 @@ function renderKPIs(){
     : FILTERED.member!=='all' ? FILTERED.member
     : 'All Institutions';
 
+  // Build daily sparkline data (totals per date)
+  const dateMap = {};
+  scopedData.forEach(s=>{ dateMap[s.date]=(dateMap[s.date]||0)+s.count; });
+  const sortedDates = Object.keys(dateMap).filter(Boolean).sort();
+  const sparkVals   = sortedDates.map(d=>dateMap[d]);
+
+  // Daily captured per date for balance sparkline (inverted)
+  const balSpark = sparkVals.map((v,i)=>{
+    const cumul = sparkVals.slice(0,i+1).reduce((a,b)=>a+b,0);
+    return Math.max(0, scopedTarget - cumul);
+  });
+
   const cards = [
-    {icon:'📦', lbl:'Total Captured',    val:scopedCaptured.toLocaleString(), sub:`Target: ${scopedTarget.toLocaleString()} · ${filterLabel}`, ac:'--teal',   pct:scopedPct},
-    {icon:'📋', lbl:'Total Balance',     val:scopedBalance.toLocaleString(),  sub:`Files remaining · ${filterLabel}`,                          ac:'--orange'},
-    {icon:'📈', lbl:'Overall Progress',  val:(scopedPct*100).toFixed(1)+'%', sub:`${filterLabel}`,                                             ac:'--purple', pct:scopedPct},
+    {icon:'📦', lbl:'Total Captured',    val:scopedCaptured.toLocaleString(), sub:`Target: ${scopedTarget.toLocaleString()} · ${filterLabel}`, ac:'--teal',   pct:scopedPct,  sparkData:sparkVals},
+    {icon:'📋', lbl:'Total Balance',     val:scopedBalance.toLocaleString(),  sub:`Files remaining · ${filterLabel}`,                          ac:'--orange', sparkData:balSpark},
+    {icon:'📈', lbl:'Overall Progress',  val:(scopedPct*100).toFixed(1)+'%', sub:`${filterLabel}`,                                             ac:'--purple', pct:scopedPct,  sparkData:sparkVals},
     {icon:'⚠️', lbl:'Duplicates Flagged',val:scopedDups.length,              sub:'Need resolution',                                            ac:'--red'},
     {icon:'👥', lbl:'Active Members',    val:activeMembers,                  sub:`of ${scopedMembers.length} total`,                           ac:'--green'},
   ];
 
   cards.forEach(c=>{
-    const pct = c.pct!==undefined ? c.pct : null;
+    const pct        = c.pct!==undefined ? c.pct : null;
     const badgeClass = pct===null?'b-blue':pct>=1?'b-green':pct>=.75?'b-blue':pct>=.4?'b-orange':'b-red';
     const badgeTxt   = pct===null?'':pct>=1?'✅ Done':pct>=.75?`🔵 ${(pct*100).toFixed(0)}%`:`⚠ ${(pct*100).toFixed(0)}%`;
+
+    // Build donut SVG if pct available
+    let donut = '';
+    if(pct !== null){
+      const r = 22, circ = 2*Math.PI*r;
+      const filled = Math.min(pct,1)*circ;
+      const acMap = {'--teal':'#2E86AB','--orange':'#E67E22','--purple':'#6C3483','--red':'#C0392B','--green':'#1A9C5B'};
+      const stroke = acMap[c.ac] || '#2E86AB';
+      const pctTxt = pct>=1?'100%':(pct*100).toFixed(0)+'%';
+      donut = `<div class="donut-wrap">
+        <svg class="donut-svg" viewBox="0 0 54 54">
+          <circle class="donut-bg" cx="27" cy="27" r="${r}"/>
+          <circle class="donut-fill" cx="27" cy="27" r="${r}"
+            stroke="${stroke}"
+            stroke-dasharray="${filled.toFixed(1)} ${circ.toFixed(1)}"
+            style="stroke-dashoffset:0"/>
+        </svg>
+        <div class="donut-label" style="color:${stroke}">${pctTxt}</div>
+      </div>`;
+    }
+
+    // Sparkline from daily stats grouped by date
+    let spark = '';
+    if(c.sparkData && c.sparkData.length > 1){
+      const vals = c.sparkData;
+      const mx = Math.max(...vals,1);
+      const W=120, H=32;
+      const pts = vals.map((v,i)=>{
+        const x = (i/(vals.length-1))*W;
+        const y = H - (v/mx)*H;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+      const acMap={'--teal':'#2E86AB','--orange':'#E67E22','--purple':'#6C3483','--red':'#C0392B','--green':'#1A9C5B'};
+      const stroke = acMap[c.ac]||'#2E86AB';
+      const polyline = pts.join(' ');
+      const area = `${pts[0].split(',')[0]},${H} ` + polyline + ` ${pts[pts.length-1].split(',')[0]},${H}`;
+      spark = `<div class="sparkline-wrap">
+        <svg class="sparkline-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <polygon points="${area}" class="spark-area" fill="${stroke}"/>
+          <polyline points="${polyline}" class="spark-line" stroke="${stroke}"/>
+          ${vals.map((v,i)=>{
+            const x=(i/(vals.length-1))*W, y=H-(v/mx)*H;
+            return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" class="spark-dot" fill="${stroke}"/>`;
+          }).join('')}
+        </svg>
+      </div>`;
+    }
+
     const div = document.createElement('div');
     div.className = 'kpi-card';
     div.style.setProperty('--ac',`var(${c.ac})`);
-    div.innerHTML = `<div class="kpi-icon">${c.icon}</div><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div>${badgeTxt?`<span class="badge ${badgeClass}">${badgeTxt}</span>`:''}`;
+    div.innerHTML = `${donut}<div class="kpi-icon">${c.icon}</div><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val" style="padding-right:${pct!==null?'60px':'0'}">${c.val}</div><div class="kpi-sub">${c.sub}</div>${badgeTxt?`<span class="badge ${badgeClass}">${badgeTxt}</span>`:''}${spark}`;
     g.appendChild(div);
   });
 }
@@ -1051,17 +1256,55 @@ function renderProgress(){
 
     const fillColor = parseFloat(pct)>=100?'#1A9C5B':parseFloat(pct)>=75?'#2E86AB':parseFloat(pct)>=40?'#E67E22':'#C0392B';
 
+    // Daily totals for mini bar chart
+    const dailyMap={};
+    RAW.stats.filter(x=>x.inst===inst.name).forEach(x=>{
+      if(x.date) dailyMap[x.date]=(dailyMap[x.date]||0)+x.count;
+    });
+    const dailyDates=Object.keys(dailyMap).sort();
+    const dailyVals=dailyDates.map(d=>dailyMap[d]);
+    const maxDaily=Math.max(...dailyVals,1);
+
+    const miniBars = dailyVals.length > 0 ? `
+      <div style="margin-top:10px;margin-bottom:4px">
+        <div style="font-size:9px;color:var(--dim);font-family:'DM Mono',monospace;margin-bottom:5px;letter-spacing:1px">DAILY CAPTURES</div>
+        <div class="mini-bars">
+          ${dailyVals.map((v,i)=>{
+            const h = Math.max(4, (v/maxDaily)*32);
+            const lbl = dailyDates[i] ? dailyDates[i].slice(5) : '';
+            return `<div class="mini-bar" style="height:${h}px;background:${fillColor};opacity:${0.5+(v/maxDaily)*0.5}" title="${dailyDates[i]}: ${v} files">
+              <div class="mini-bar-lbl">${lbl}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="height:14px"></div>
+      </div>` : '';
+
+    // Donut SVG for progress card
+    const r2=18, circ2=2*Math.PI*r2, filled2=Math.min(parseFloat(pct)/100,1)*circ2;
+    const donutProg=`<svg width="44" height="44" viewBox="0 0 44 44" style="transform:rotate(-90deg);flex-shrink:0">
+      <circle cx="22" cy="22" r="${r2}" fill="none" stroke="var(--s3)" stroke-width="4"/>
+      <circle cx="22" cy="22" r="${r2}" fill="none" stroke="${fillColor}" stroke-width="4"
+        stroke-linecap="round"
+        stroke-dasharray="${filled2.toFixed(1)} ${circ2.toFixed(1)}"/>
+    </svg>`;
+
     const div=document.createElement('div');
     div.className='prog-card';
     div.innerHTML=`
       <div class="prog-head">
-        <div><div class="prog-name">🏥 ${inst.name}</div>
+        <div style="flex:1"><div class="prog-name">🏥 ${inst.name}</div>
           <div class="prog-sub">${inst.code} · Target: ${s.target.toLocaleString()}</div></div>
-        <div style="text-align:right"><div class="prog-pct">${pct}%</div>
-          <div class="prog-pct-lbl">complete</div></div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="position:relative;width:44px;height:44px;flex-shrink:0">
+            ${donutProg}
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:'DM Mono',monospace;color:${fillColor}">${pct}%</div>
+          </div>
+        </div>
       </div>
-      <div class="track"><div class="fill" style="width:${pct}%;background:linear-gradient(90deg,${fillColor},${fillColor}aa)"></div></div>
+      <div class="track"><div class="fill" style="width:${pct}%;background:linear-gradient(90deg,${fillColor},${fillColor}bb)"></div></div>
       <div class="prog-meta"><span>${s.captured.toLocaleString()} captured</span><span>${s.balance.toLocaleString()} remaining</span></div>
+      ${miniBars}
       ${ownerBars||'<div style="font-size:10px;color:var(--dim);margin-top:6px">No data yet for this institution</div>'}`;
     g.appendChild(div);
   });
