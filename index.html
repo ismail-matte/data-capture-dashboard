@@ -233,7 +233,7 @@ code{background:var(--s3);padding:1px 5px;border-radius:3px;font-size:10px;font-
   <div class="lock-card">
     <div class="lock-logo">📊</div>
     <div class="lock-title">Data Capture Dashboard</div>
-    <div class="lock-subtitle">ARUA RRH · ARUA CITY · ARUA DLG · YUMBE RRH</div>
+    <div class="lock-subtitle">ARUA RRH · ARUA CITY · ARUA DLG · YUMBE RRH · TOTAL TARGET: 3,828</div>
     <input class="lock-input" id="lockInput" type="password" placeholder="Enter passcode" maxlength="20" />
     <button class="lock-btn" onclick="tryUnlock()">Unlock Dashboard</button>
     <div class="lock-error" id="lockError"></div>
@@ -840,52 +840,78 @@ function initApp(){
   // load defaults
   RAW.config.institutions = [
     {name: 'Arua RRH',  code: 'RRH',   target: 249,  notes: 'Regional Referral Hospital'},
-    {name: 'Arua City', code: 'CITY',  target: 2253, notes: 'City Council'},
-    {name: 'Arua DLG',  code: 'DLG',   target: 0,    notes: 'District Local Government'},
-    {name: 'Yumbe RRH', code: 'YUMBE', target: 0,    notes: 'Yumbe Referral Hospital'},
+    {name: 'Arua City', code: 'CITY',  target: 2253, notes: 'City Council / Urban'},
+    {name: 'Arua DLG',  code: 'DLG',   target: 1096, notes: 'District Local Government'},
+    {name: 'Yumbe RRH', code: 'YUMBE', target: 230,  notes: 'Yumbe Referral Hospital'},
   ];
   RAW.config.members = [
-    {name: 'Nicholas Mulaya', short: 'Nicholas', status: 'ACTIVE', inst: 'Arua RRH'},
-    {name: 'Robinah Kasande', short: 'Robinah',  status: 'ACTIVE', inst: 'Arua RRH'},
-    {name: 'Kalinda Fredrick', short: 'Fredrick', status: 'ACTIVE', inst: 'Arua RRH'},
-    {name: 'Anthony Nyombi',  short: 'Anthony',  status: 'ACTIVE', inst: 'Arua RRH'},
-    {name: 'Salim Kigundu',   short: 'Salim',    status: 'ACTIVE', inst: 'Arua RRH'},
-    {name: 'Dilght Cotilda',  short: 'Delight',  status: 'ACTIVE', inst: 'Arua RRH'},
-    {name: 'Ismail Matte',    short: 'Ismail',   status: 'ACTIVE', inst: 'Arua RRH', phone: '0782475028'},
-    {name: 'Dan Ndyamureeba', short: 'Dan',      status: 'OFF',    inst: 'Arua RRH'},
+    {name: 'Nicholas Mulaya',  short: 'Nicholas', status: 'ACTIVE', inst: 'MoPS'},
+    {name: 'Robinah Kasande',  short: 'Robinah',  status: 'ACTIVE', inst: 'MoPS'},
+    {name: 'Kalinda Fredrick', short: 'Fredrick', status: 'ACTIVE', inst: 'MoPS'},
+    {name: 'Anthony Nyombi',   short: 'Anthony',  status: 'ACTIVE', inst: 'MoPS'},
+    {name: 'Salim Kigundu',    short: 'Salim',    status: 'ACTIVE', inst: 'MoPS'},
+    {name: 'Cotil Delight',    short: 'Delight',  status: 'ACTIVE', inst: 'MoPS'},
+    {name: 'Ismail Matte',     short: 'Ismail',   status: 'ACTIVE', inst: 'MoPS', phone: '0782475028'},
+    {name: 'Other',            short: 'Other',    status: 'ACTIVE', inst: 'MoPS'},
   ];
   RAW.stats = [
-    {date: '2026-02-17', inst: 'Arua RRH', owner: 'Nicholas Mulaya', count: 0,  duty: 'YES', notes: ''},
-    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Nicholas Mulaya', count: 38, duty: 'YES', notes: 'Day Start'},
-    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Robinah Kasande', count: 37, duty: 'YES', notes: ''},
-    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Kalinda Fredrick', count: 44, duty: 'YES', notes: ''},
-    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Anthony Nyombi',  count: 25, duty: 'YES', notes: ''},
-    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Salim Kigundu',   count: 37, duty: 'YES', notes: ''},
-    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Cotil Delight',   count: 22, duty: 'YES', notes: ''},
-    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Ismail Matte',    count: 35, duty: 'YES', notes: ''},
-    {date: '2026-02-19', inst: 'Arua City', owner: 'Nicholas Mulaya', count: 19, duty: 'YES', notes: 'Day Start'},
-    {date: '2026-02-19', inst: 'Arua City', owner: 'Robinah Kasande', count: 15, duty: 'YES', notes: ''},
+    // ── Arua RRH ── (2026-02-18)
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Nicholas Mulaya',  count: 38,  duty: 'YES', notes: 'Day Start'},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Robinah Kasande',  count: 37,  duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Kalinda Fredrick', count: 44,  duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Anthony Nyombi',   count: 25,  duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Salim Kigundu',    count: 37,  duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Cotil Delight',    count: 22,  duty: 'YES', notes: ''},
+    {date: '2026-02-18', inst: 'Arua RRH', owner: 'Ismail Matte',     count: 35,  duty: 'YES', notes: ''},
+    // ── Arua City ── (2026-02-19)
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Nicholas Mulaya',  count: 19, duty: 'YES', notes: 'Day Start'},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Robinah Kasande',  count: 15, duty: 'YES', notes: ''},
     {date: '2026-02-19', inst: 'Arua City', owner: 'Kalinda Fredrick', count: 51, duty: 'YES', notes: ''},
-    {date: '2026-02-19', inst: 'Arua City', owner: 'Anthony Nyombi',  count: 19, duty: 'YES', notes: ''},
-    {date: '2026-02-19', inst: 'Arua City', owner: 'Salim Kigundu',   count: 21, duty: 'YES', notes: ''},
-    {date: '2026-02-19', inst: 'Arua City', owner: 'Cotil Delight',   count: 13, duty: 'YES', notes: ''},
-    {date: '2026-02-19', inst: 'Arua City', owner: 'Ismail Matte',    count: 9,  duty: 'YES', notes: ''},
-    {date: '2026-02-20', inst: 'Arua City', owner: 'Nicholas Mulaya', count: 43, duty: 'YES', notes: 'Day Start'},
-    {date: '2026-02-20', inst: 'Arua City', owner: 'Robinah Kasande', count: 48, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Anthony Nyombi',   count: 19, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Salim Kigundu',    count: 21, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Cotil Delight',    count: 13, duty: 'YES', notes: ''},
+    {date: '2026-02-19', inst: 'Arua City', owner: 'Ismail Matte',     count: 9,  duty: 'YES', notes: ''},
+    // ── Arua City ── (2026-02-20)
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Nicholas Mulaya',  count: 43, duty: 'YES', notes: 'Day Start'},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Robinah Kasande',  count: 48, duty: 'YES', notes: ''},
     {date: '2026-02-20', inst: 'Arua City', owner: 'Kalinda Fredrick', count: 69, duty: 'YES', notes: ''},
-    {date: '2026-02-20', inst: 'Arua City', owner: 'Anthony Nyombi',  count: 56, duty: 'YES', notes: ''},
-    {date: '2026-02-20', inst: 'Arua City', owner: 'Salim Kigundu',   count: 50, duty: 'YES', notes: ''},
-    {date: '2026-02-20', inst: 'Arua City', owner: 'Cotil Delight',   count: 18, duty: 'YES', notes: ''},
-    {date: '2026-02-20', inst: 'Arua City', owner: 'Ismail Matte',    count: 30, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Anthony Nyombi',   count: 56, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Salim Kigundu',    count: 50, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Cotil Delight',    count: 18, duty: 'YES', notes: ''},
+    {date: '2026-02-20', inst: 'Arua City', owner: 'Ismail Matte',     count: 30, duty: 'YES', notes: ''},
+    // ── Arua City ── (2026-02-21)
+    {date: '2026-02-21', inst: 'Arua City', owner: 'Nicholas Mulaya',  count: 44, duty: 'YES', notes: 'Day Start'},
+    {date: '2026-02-21', inst: 'Arua City', owner: 'Robinah Kasande',  count: 40, duty: 'YES', notes: ''},
+    {date: '2026-02-21', inst: 'Arua City', owner: 'Kalinda Fredrick', count: 70, duty: 'YES', notes: ''},
+    {date: '2026-02-21', inst: 'Arua City', owner: 'Anthony Nyombi',   count: 64, duty: 'YES', notes: ''},
+    {date: '2026-02-21', inst: 'Arua City', owner: 'Salim Kigundu',    count: 36, duty: 'YES', notes: ''},
+    {date: '2026-02-21', inst: 'Arua City', owner: 'Cotil Delight',    count: 26, duty: 'YES', notes: ''},
+    {date: '2026-02-21', inst: 'Arua City', owner: 'Ismail Matte',     count: 44, duty: 'YES', notes: ''},
+    // ── Arua City ── (2026-02-22)
+    {date: '2026-02-22', inst: 'Arua City', owner: 'Nicholas Mulaya',  count: 0,  duty: 'NO',  notes: 'Day Start'},
+    {date: '2026-02-22', inst: 'Arua City', owner: 'Robinah Kasande',  count: 42, duty: 'YES', notes: ''},
+    {date: '2026-02-22', inst: 'Arua City', owner: 'Kalinda Fredrick', count: 99, duty: 'YES', notes: ''},
+    {date: '2026-02-22', inst: 'Arua City', owner: 'Anthony Nyombi',   count: 76, duty: 'YES', notes: ''},
+    {date: '2026-02-22', inst: 'Arua City', owner: 'Salim Kigundu',    count: 47, duty: 'YES', notes: ''},
+    {date: '2026-02-22', inst: 'Arua City', owner: 'Cotil Delight',    count: 25, duty: 'YES', notes: ''},
+    {date: '2026-02-22', inst: 'Arua City', owner: 'Ismail Matte',     count: 48, duty: 'YES', notes: ''},
+    // ── Arua City ── (2026-02-23)
+    {date: '2026-02-23', inst: 'Arua City', owner: 'Robinah Kasande',  count: 0,   duty: 'YES', notes: 'Day Start'},
+    {date: '2026-02-23', inst: 'Arua City', owner: 'Kalinda Fredrick', count: 122, duty: 'YES', notes: ''},
+    {date: '2026-02-23', inst: 'Arua City', owner: 'Anthony Nyombi',   count: 89,  duty: 'YES', notes: ''},
+    {date: '2026-02-23', inst: 'Arua City', owner: 'Salim Kigundu',    count: 66,  duty: 'YES', notes: ''},
+    {date: '2026-02-23', inst: 'Arua City', owner: 'Cotil Delight',    count: 40,  duty: 'YES', notes: ''},
+    {date: '2026-02-23', inst: 'Arua City', owner: 'Ismail Matte',     count: 36,  duty: 'YES', notes: ''},
+    {date: '2026-02-23', inst: 'Arua City', owner: 'Other',            count: 0,   duty: 'YES', notes: ''},
   ];
   RAW.duplicates = [
-    {date: '2026-02-18', empNo: '000000000077339', owner1: 'Robinah Kasande', owner2: 'Anthony Nyombi', inst: 'Arua RRH'},
-    {date: '2026-02-18', empNo: '000000000726818', owner1: 'Robinah Kasande', owner2: 'Salim Kigundu', inst: 'Arua RRH'},
-    {date: '2026-02-18', empNo: '000000000727042', owner1: 'Nicholas Mulaya', owner2: 'Dilght Cotilda', inst: 'Arua RRH'},
-    {date: '2026-02-18', empNo: '000000000727684', owner1: 'Robinah Kasande', owner2: 'Kalinda Fredrick', inst: 'Arua RRH'},
-    {date: '2026-02-18', empNo: '000000000756510', owner1: 'Robinah Kasande', owner2: 'Salim Kigundu', inst: 'Arua RRH'},
-    {date: '2026-02-18', empNo: '000000001040530', owner1: 'Robinah Kasande', owner2: 'Dilght Cotilda', inst: 'Arua RRH'},
-    {date: '2026-02-18', empNo: '000000001078371', owner1: 'Kalinda Fredrick', owner2: 'Dilght Cotilda', inst: 'Arua RRH'},
+    {date: '2026-02-18', empNo: '000000000077339', owner1: 'Robinah Kasande',  owner2: 'Anthony Nyombi',   inst: 'MoPS'},
+    {date: '2026-02-18', empNo: '000000000726818', owner1: 'Robinah Kasande',  owner2: 'Salim Kigundu',    inst: 'MoPS'},
+    {date: '2026-02-18', empNo: '000000000727042', owner1: 'Nicholas Mulaya',  owner2: 'Dilght Cotilda',   inst: 'MoPS'},
+    {date: '2026-02-18', empNo: '000000000727684', owner1: 'Robinah Kasande',  owner2: 'Kalinda Fredrick', inst: 'MoPS'},
+    {date: '2026-02-18', empNo: '000000000756510', owner1: 'Robinah Kasande',  owner2: 'Salim Kigundu',    inst: 'MoPS'},
+    {date: '2026-02-18', empNo: '000000001040530', owner1: 'Robinah Kasande',  owner2: 'Dilght Cotilda',   inst: 'MoPS'},
+    {date: '2026-02-18', empNo: '000000001078371', owner1: 'Kalinda Fredrick', owner2: 'Dilght Cotilda',   inst: 'MoPS'},
   ];
 
   populateFilters();
